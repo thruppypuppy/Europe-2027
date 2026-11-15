@@ -402,10 +402,8 @@ function vSummary(){
   return (isEmpty()?'<div class="notice">Nothing here yet. Open Setup to import your starter data, or add rows on the Itinerary tab.</div>':'')+(VIEW!=='all'?'<div class="notice">The Summary always shows the whole trip, not just your view.</div>':'')+warn+'<section class="tiles">'+tile('Total cost',money(m.cost))+tile('Paid so far',money(m.paid),'<div class="bar"><i style="width:'+pct+'%"></i></div>')+tile('Yet to pay',money(m.yet))+tile('Booked or paid',m.done+' of '+m.n)+'</section>'+
   '<section class="card"><div class="cardhead"><div><h2>Who owes who</h2><p>Based on items marked Paid, using the share amounts on the Itinerary tab.</p></div></div>'+
     '<div class="verdict '+(sq?'sq':'owe')+'">'+verdict+'</div><div class="tbl-wrap"><table class="plain"><thead><tr><th></th><th class="n">'+esc(c.p1)+'</th><th class="n">'+esc(c.p2)+'</th></tr></thead><tbody>'+
-    '<tr><td>Paid to suppliers so far</td><td class="n">'+mny(m.paid1)+'</td><td class="n">'+mny(m.paid2)+'</td></tr>'+
-    '<tr><td>Fair share of that</td><td class="n">'+mny(m.fair1)+'</td><td class="n">'+mny(m.fair2)+'</td></tr>'+
     '<tr><td>Settle-up payments made to the other party<br><span class="hint">Add each one in the box below.</span></td><td class="n">'+mny(m.s1)+'</td><td class="n">'+mny(m.s2)+'</td></tr>'+
-    '<tr><td>Share of what is still to pay</td><td class="n">'+mny(m.yet1)+'</td><td class="n">'+mny(m.yet2)+'</td></tr></tbody></table></div></section>'+payCard(m,c)+
+    '</tbody></table></div></section>'+payCard(m,c)+
   '<section class="card"><div class="cardhead"><div><h2>By type</h2></div></div><div class="tbl-wrap"><table class="plain"><thead><tr><th>Type</th><th class="n">Cost</th><th class="n">Paid</th><th class="n">Yet to pay</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td>Total</td><td class="n">'+money(m.cost,2)+'</td><td class="n">'+money(m.paid,2)+'</td><td class="n">'+money(m.yet,2)+'</td></tr></tfoot></table></div></section>';
 }
 var PAY={open:false,from:'1',amount:'',date:'',what:'',err:''};
