@@ -145,6 +145,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
   .topline h1{font-size:19px}
 }
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .3s}}
+.payform{margin:8px 16px 12px;padding:12px 14px;border:1px solid var(--blue);background:var(--blue-soft);border-radius:8px}.payform h3{margin:0 0 8px;font-size:15px}.payform label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}
 
 /* standalone page basics */
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -168,14 +169,14 @@ body{margin:0}
 'use strict';
 var $=function(s){return document.querySelector(s)};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
-var COLLS=['stays','travel','other','days'],NEED=COLLS.length+1;
+var COLLS=['stays','travel','other','days','payments'],NEED=COLLS.length+1;
 var STATUS=['Researching','Considering','Booked','Paid','Cancelled'];
 var TYPES=['Flight','Train','Car hire','Bus','Ferry','Taxi','Other'];
 var CATS=['Experience / tour','Food & dining','Tickets / entry','Travel insurance','Visa / documents','eSIM / data','Other'];
 var PAL=['#2F5D8A','#C8553D','#2E8B7A','#8A6BB0','#D08C2B','#4E8F4A','#B2456E','#5B6C7D','#7C5E3C','#3F8FB5'];
 var DEF={p1:'Thrupps',p2:'Ameer-Begs',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0};
 var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Trip plan'],['setup','Setup']];
-var S={stays:{},travel:{},other:{},days:{},settings:null};
+var S={stays:{},travel:{},other:{},days:{},payments:{},settings:null};
 var db=null,RO=false,noDb=false,timedOut=false,needRender=false,pendingEdits=0,inflight=0,writeFail=false;
 var AUTH='loading',AUTHMSG='',AUTHEMAIL='',PENDING_LINK=false,IMPORT=null,IMPORTERR='',USERMAIL='',auth=null,fs=null,unsubs=[];
 var BASE='trips/main';
@@ -276,7 +277,7 @@ function calc(){
     }else T.yet1+=shareOf(it);
   });
   T.yet=T.cost-T.paid;T.fair2=T.paid1+T.paid2-T.fair1;T.yet2=T.yet-T.yet1;
-  var c=cfg();T.balance=(T.paid1-T.fair1)+(+c.settleP1||0)-(+c.settleP2||0);
+  var c=cfg();T.s1=+c.settleP1||0;T.s2=+c.settleP2||0;arr(S.payments).forEach(function(p){var a=+p.amount||0;if(p.from==='1')T.s1+=a;else if(p.from==='2')T.s2+=a});T.balance=(T.paid1-T.fair1)+T.s1-T.s2;
   return T;
 }
 var STAYS_OVR=null;
@@ -335,10 +336,39 @@ function vSummary(){
     '<div class="verdict '+(sq?'sq':'owe')+'">'+verdict+'</div><div class="tbl-wrap"><table class="plain"><thead><tr><th></th><th class="n">'+esc(c.p1)+'</th><th class="n">'+esc(c.p2)+'</th></tr></thead><tbody>'+
     '<tr><td>Paid to suppliers so far</td><td class="n">'+mny(m.paid1)+'</td><td class="n">'+mny(m.paid2)+'</td></tr>'+
     '<tr><td>Fair share of that</td><td class="n">'+mny(m.fair1)+'</td><td class="n">'+mny(m.fair2)+'</td></tr>'+
-    '<tr><td>Settle-up payments made to the other party<br><span class="hint">Enter the running total each has paid across.</span></td><td>'+fld('meta','settings','settleP1',c.settleP1,'num')+'</td><td>'+fld('meta','settings','settleP2',c.settleP2,'num')+'</td></tr>'+
-    '<tr><td>Share of what is still to pay</td><td class="n">'+mny(m.yet1)+'</td><td class="n">'+mny(m.yet2)+'</td></tr></tbody></table></div></section>'+
+    '<tr><td>Settle-up payments made to the other party<br><span class="hint">Add each one in the box below.</span></td><td class="n">'+mny(m.s1)+'</td><td class="n">'+mny(m.s2)+'</td></tr>'+
+    '<tr><td>Share of what is still to pay</td><td class="n">'+mny(m.yet1)+'</td><td class="n">'+mny(m.yet2)+'</td></tr></tbody></table></div></section>'+payCard(m,c)+
   '<section class="card"><div class="cardhead"><div><h2>By type</h2></div></div><div class="tbl-wrap"><table class="plain"><thead><tr><th>Type</th><th class="n">Cost</th><th class="n">Paid</th><th class="n">Yet to pay</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td>Total</td><td class="n">'+money(m.cost,2)+'</td><td class="n">'+money(m.paid,2)+'</td><td class="n">'+money(m.yet,2)+'</td></tr></tfoot></table></div></section>';
 }
+var PAY={open:false,from:'1',amount:'',date:'',what:'',err:''};
+var todayIso=function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+function payCard(m,c){
+  var list=arr(S.payments).sort(byDate('date'));
+  var rows=list.map(function(p){return '<tr><td>'+fld('payments',p.id,'date',p.date,'date')+'</td><td>'+sel('payments',p.id,'from',p.from,[['1',c.p1+' paid '+c.p2],['2',c.p2+' paid '+c.p1]])+'</td><td>'+fld('payments',p.id,'amount',p.amount,'num')+'</td><td style="min-width:180px">'+fld('payments',p.id,'what',p.what,'text','What it was for')+'</td><td>'+delBtn('payments',p.id)+'</td></tr>'}).join('');
+  var legacy=(+c.settleP1||+c.settleP2)?'<div class="notice" style="margin:8px 16px">Earlier totals typed in before this list existed: '+esc(c.p1)+' '+fld('meta','settings','settleP1',c.settleP1,'num')+' '+esc(c.p2)+' '+fld('meta','settings','settleP2',c.settleP2,'num')+' They are included in the totals. Set both to 0 once you have listed those payments below.</div>':'';
+  var form=PAY.open?'<div class="payform"><h3>Record a payment</h3><div class="formgrid">'+
+    '<label>Who paid whom<select class="in sel" id="pay-from" data-payf="from"><option value="1"'+(PAY.from==='1'?' selected':'')+'>'+esc(c.p1)+' paid '+esc(c.p2)+'</option><option value="2"'+(PAY.from==='2'?' selected':'')+'>'+esc(c.p2)+' paid '+esc(c.p1)+'</option></select></label>'+
+    '<label>How much (AUD)<input class="in num" id="pay-amount" data-payf="amount" inputmode="decimal" value="'+esc(PAY.amount)+'" autocomplete="off" placeholder="0.00"></label>'+
+    '<label>When paid<input class="in" id="pay-date" data-payf="date" type="date" value="'+esc(PAY.date||todayIso())+'"></label>'+
+    '<label style="grid-column:1/-1">What for<input class="in" id="pay-what" data-payf="what" value="'+esc(PAY.what)+'" autocomplete="off" placeholder="e.g. Marseille apartment deposit"></label></div>'+
+    (PAY.err?'<div class="notice bad" style="margin:8px 0">'+esc(PAY.err)+'</div>':'')+
+    '<div class="planbtns" style="margin-top:10px"><button class="btn primary" data-pay="save">Save payment</button><button class="btn" data-pay="cancel">Cancel</button></div></div>':'';
+  return '<section class="card"><div class="cardhead"><div><h2>Settle-up payments</h2><p>Money one of you has paid to the other to square up. These are counted in Who owes who.</p></div>'+(PAY.open?'':'<button class="btn primary" data-pay="open"'+(RO?' disabled':'')+'>+ Record a payment</button>')+'</div>'+legacy+form+
+    '<div class="tbl-wrap"><table class="plain" style="min-width:640px"><thead><tr><th>Date</th><th>Who paid whom</th><th class="n">Amount</th><th>For</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="5" class="empty">No settle-up payments yet.</td></tr>')+'</tbody>'+(list.length?'<tfoot><tr><td></td><td>Total paid</td><td class="n">'+esc(c.p1)+' '+money(m.s1,2)+'<br>'+esc(c.p2)+' '+money(m.s2,2)+'</td><td></td><td></td></tr></tfoot>':'')+'</table></div></section>';
+}
+function payEvt(e){var t=e.target;if(t&&t.dataset&&t.dataset.payf){PAY[t.dataset.payf]=t.value;if(PAY.err&&t.dataset.payf==='amount'){PAY.err='';var n=document.querySelector('.payform .notice');if(n)n.remove()}}}
+document.addEventListener('input',payEvt,true);document.addEventListener('change',payEvt,true);
+document.addEventListener('click',function(e){
+  var b=e.target.closest&&e.target.closest('button[data-pay]');if(!b||RO)return;var a=b.dataset.pay;
+  if(a==='open'){PAY={open:true,from:'1',amount:'',date:todayIso(),what:'',err:''};render();var f=document.getElementById('pay-amount');if(f)f.focus()}
+  else if(a==='cancel'){PAY.open=false;PAY.err='';render()}
+  else if(a==='save'){
+    var amt=parseFloat(String(PAY.amount).replace(/[$,\s]/g,''));
+    if(!(amt>0)){PAY.err='Enter how much was paid.';render();return}
+    add('payments',{date:PAY.date||todayIso(),from:PAY.from,amount:Math.round(amt*100)/100,what:String(PAY.what||'').trim()});
+    PAY={open:false,from:'1',amount:'',date:'',what:'',err:''};render();
+  }
+});
 var LAY={places:1,stays:1,travel:1,other:1,notes:1};
 try{var _l=JSON.parse(localStorage.getItem('tripLayers')||'null');if(_l)Object.keys(LAY).forEach(function(k){if(k in _l)LAY[k]=_l[k]?1:0})}catch(e){}
 var PLAN={on:false,order:[],nights:{},gaps:[],first:'',base:{},moveJ:true};
@@ -509,7 +539,7 @@ function backupCards(){
 }
 function exportData(){
   var out={meta:{settings:Object.assign({},cfg())}};
-  ['stays','travel','other','days'].forEach(function(c){out[c]={};Object.keys(S[c]).forEach(function(id){out[c][id]=S[c][id]})});
+  ['stays','travel','other','days','payments'].forEach(function(c){out[c]={};Object.keys(S[c]).forEach(function(id){out[c][id]=S[c][id]})});
   var blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='europe-2027-backup-'+isoOf(new Date())+'.json';
   document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
@@ -520,7 +550,7 @@ function readImport(inp){
   r.onload=function(){
     try{
       var d=JSON.parse(r.result),n=0,ok=false;
-      ['stays','travel','other','days'].forEach(function(c){if(d[c]&&typeof d[c]==='object'){ok=true;n+=Object.keys(d[c]).length}});
+      ['stays','travel','other','days','payments'].forEach(function(c){if(d[c]&&typeof d[c]==='object'){ok=true;n+=Object.keys(d[c]).length}});
       if(d.meta&&d.meta.settings){ok=true;n++}
       if(!ok)throw new Error('bad');
       IMPORT={n:n,data:d};IMPORTERR='';
@@ -531,7 +561,7 @@ function readImport(inp){
 }
 function doImport(){
   if(!IMPORT)return;var d=IMPORT.data,ops=[];
-  ['stays','travel','other','days'].forEach(function(c){if(d[c])Object.keys(d[c]).forEach(function(id){if(d[c][id]&&typeof d[c][id]==='object')ops.push([fs.doc(BASE+'/'+c+'/'+id),d[c][id]])})});
+  ['stays','travel','other','days','payments'].forEach(function(c){if(d[c])Object.keys(d[c]).forEach(function(id){if(d[c][id]&&typeof d[c][id]==='object')ops.push([fs.doc(BASE+'/'+c+'/'+id),d[c][id]])})});
   if(d.meta&&d.meta.settings)ops.push([fs.doc(BASE+'/meta/settings'),d.meta.settings]);
   var chunks=[];for(var i=0;i<ops.length;i+=400)chunks.push(ops.slice(i,i+400));
   inflight++;setSync();
@@ -630,7 +660,7 @@ window.addEventListener('hashchange',function(){window.scrollTo(0,0);render()});
 function markLoaded(k){loadedSet[k]=1;setSync()}
 function teardown(){
   unsubs.forEach(function(u){try{u()}catch(e){}});unsubs=[];
-  loadedSet={};confirmed={};timedOut=false;S={stays:{},travel:{},other:{},days:{},settings:null};
+  loadedSet={};confirmed={};timedOut=false;S={stays:{},travel:{},other:{},days:{},payments:{},settings:null};
 }
 function subErr(err){
   console.error(err);
