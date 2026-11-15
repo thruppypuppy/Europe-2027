@@ -164,6 +164,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .blk b{font-family:var(--display);font-size:14px;line-height:1.15}
 .blk span{font-size:10.5px;font-weight:600;opacity:.95;line-height:1.2}
 .half:not(:has(small)) .blk{padding-top:6px}
+.half.full{flex:1}.half.full .blk{justify-content:flex-start;padding-top:8px}
 .blk[draggable=true]{cursor:grab}.blk.dragging{opacity:.4}
 .cx2{display:flex;flex-direction:column}
 .ct2{font-size:11px;padding:4px 8px;line-height:1.25;overflow-wrap:anywhere;border-top:1px solid var(--line)}
@@ -174,7 +175,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .pdl{display:flex;flex-direction:column;font-size:11px;font-weight:700;color:var(--muted);gap:2px}.pdl .in{width:140px}
 .pn{min-width:90px}
 @media (max-width:700px){.cday.blank{display:none}}
-.itin{max-width:780px;margin:0 auto;display:flex;flex-direction:column;padding:0 0 8px}
+.itin{width:100%;margin:0;display:flex;flex-direction:column;padding:0 0 8px}
 .pbox{border:1px solid var(--line);border-radius:20px;background:var(--surface);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .phead{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;padding:14px 18px;color:#fff}
 .phead h3{margin:0;font-family:var(--display);font-size:24px;line-height:1.1}.phead small{font-size:13px;font-weight:600;opacity:.92}
@@ -192,11 +193,11 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .iedit{border-top:1px solid var(--line);padding:2px 0 12px}
 .iedit .formgrid{padding:10px 14px 4px}.iedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}.iedit label.wide{grid-column:1/-1}
 .iact{display:flex;justify-content:space-between;align-items:center;padding:6px 14px 0}
-.leg{width:calc(100% - 56px);margin:0 auto;padding:8px 16px 10px;background:var(--blue-soft);border-left:1px solid var(--line);border-right:1px solid var(--line);position:relative}
+.leg{width:calc(100% - 72px);margin:0 auto;padding:8px 16px 10px;background:var(--blue-soft);border-left:1px solid var(--line);border-right:1px solid var(--line);position:relative}
 .leg::before{content:"";position:absolute;left:-1px;top:0;bottom:0;border-left:3px dashed var(--blue)}
 .leg .item{background:var(--surface)}
 .addb{margin:4px 0 2px;border-style:dashed}
-.itinfoot{max-width:780px;margin:14px auto 24px}
+.itinfoot{margin:14px 0 24px;text-align:center}
 
 /* standalone page basics */
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -515,7 +516,7 @@ function vCalendarInner(c,P){
           return '<div class="blk" style="background:'+(col[norm(st.location)]||'var(--slate)')+'"'+((P&&!RO)?' draggable="true" data-sid="'+st.id+'" data-from="'+d+'"':'')+'><b>'+esc(st.location||'Unnamed stay')+'</b>'+'<span>'+(L.stays?(st.name?esc(st.name)+' · ':'')+mk[1]:mk[1].charAt(0))+'</span>'+'</div>'}).join('')+'</div></div>'}
       var body='';
       if(L.places){
-        if(same&&o.am.length)body=blk(o.pm,'');
+        if(same&&o.am.length)body=blk(o.pm,'').replace('class="half"','class="half full"');
         else if(o.am.length||o.pm.length||(inTrip&&d<c.end))body=blk(o.am,'Until 12pm',inTrip&&d>c.start&&d<c.end)+blk(o.pm,'From 12pm',inTrip&&d>=c.start&&d<c.end);
       }
       var js=tr.filter(function(t){return t.date===d}),ex='';
