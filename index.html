@@ -810,6 +810,8 @@ function renderHead(){
 }
 function lock(){document.querySelectorAll('#view input,#view select,#view textarea,#view button[data-add],#view button[data-iadd],#view button[data-del]').forEach(function(e){e.disabled=true})}
 function render(){
+  var ae0=document.activeElement;
+  if(ae0&&ae0.tagName==='INPUT'&&ae0.type==='date'&&ae0.closest&&ae0.closest('#view')){needRender=true;return}
   needRender=false;
   var ae=document.activeElement,v=$('#view'),fid=(ae&&ae.id&&v.contains(ae))?ae.id:null,ss=null,se=null;
   try{ss=ae.selectionStart;se=ae.selectionEnd}catch(e){}
@@ -856,6 +858,7 @@ document.addEventListener('click',function(e){
   }
 });
 document.addEventListener('change',function(e){if(e.target&&e.target.id==='viewas'){VIEW=e.target.value;try{localStorage.setItem('tripView',VIEW)}catch(x){}render()}});
+document.addEventListener('focusout',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='date'&&t.closest&&t.closest('#view'))setTimeout(render,0)},true);
 document.addEventListener('change',function(e){if(e.target&&e.target.id==='importFile')readImport(e.target)});
 document.addEventListener('input',function(e){if(e.target&&e.target.id==='authEmail')AUTHEMAIL=e.target.value});
 document.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target&&e.target.id==='authEmail'){e.preventDefault();doAct(PENDING_LINK?'finishlink':'sendlink')}});
