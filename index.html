@@ -201,6 +201,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .legnote{margin:10px 14px 0;padding:8px 12px;border-radius:10px;background:var(--blue-soft);font-size:12.5px;line-height:1.45}.legnote .btn{margin-left:6px}.item.auto{border-style:dashed}
 .leg.slim{height:16px;padding:0}.leg.slim .lbl{display:none}.homerow{padding:4px 2px 6px}.homerow label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted);max-width:280px}
 .phead.tap{cursor:pointer;outline:none}.phead.tap:hover,.phead.tap:focus-visible{filter:brightness(1.07)}.ptail{display:flex;align-items:center;gap:8px;flex:none}.pedit{font-size:12px;font-weight:700;background:rgba(255,255,255,.22);padding:3px 10px;border-radius:99px}.pbox>.iedit{background:var(--surface)}
+.half.fly{background:var(--slate);color:#fff;justify-content:center;padding:12px 8px 3px}.half.fly>b{font-size:12px}
 
 /* standalone page basics */
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -337,10 +338,11 @@ function calc(){
 }
 var STAYS_OVR=null;
 function stayOn(d){var m=null;(STAYS_OVR||arr(S.stays)).filter(vis).sort(byDate('checkIn')).forEach(function(s){if(s.checkIn&&s.checkOut&&s.checkIn<=d&&s.checkOut>d)m=s});return m}
+function flightOn(d,night){var m=null;arr(S.travel).forEach(function(t){if(!t.date||!(t.type==='Flight'||t.leg))return;var e=t.arriveDate||t.date;if(t.date<=d&&(night?d<e:d<=e))m=t});return m}
 function issues(){
   var c=cfg(),out=[];
   if(!c.start||!c.end||c.end<c.start)return out;
-  for(var d=c.start;d<c.end;d=addDays(d,1)){if(!stayOn(d))out.push('No stay recorded for the night of '+dfmt(d)+'.')}
+  for(var d=c.start;d<c.end;d=addDays(d,1)){if(!stayOn(d)&&!flightOn(d,true))out.push('No stay recorded for the night of '+dfmt(d)+'.')}
   arr(S.travel).filter(vis).sort(byDate('date')).forEach(function(t){
     if(!t.date)return;var lab=(t.type||'Journey').toLowerCase()+' '+(t.from||'?')+' → '+(t.to||'?')+' on '+dfmt(t.date);
     var prev=addDays(t.date,-1);
@@ -514,11 +516,13 @@ function vCalendarInner(c,P){
       var lab=dfmt(d,{weekday:'short',day:'numeric',month:'short'}),inTrip=d>=c.start&&d<=c.end,o=occ(d);
       var same=o.am.map(function(x){return x.id}).join()===o.pm.map(function(x){return x.id}).join();
       var blk=function(list,cap,empty){
+        if(!list.length&&empty&&flightOn(d,false))return '<div class="half fly">'+(cap?'<small>'+cap+'</small>':'')+'<b>✈️ Flying</b></div>';
         if(!list.length)return '<div class="half'+(empty?' none':' nil')+'">'+(cap?'<small>'+cap+'</small>':'')+(empty?'<b>No stay</b>':'')+'</div>';
         return '<div class="half">'+(cap?'<small>'+cap+'</small>':'')+'<div class="blks">'+list.map(function(st){var mk=mark(st.status);
           return '<div class="blk" style="background:'+(col[norm(st.location)]||'var(--slate)')+'"'+((P&&!RO)?' draggable="true" data-sid="'+st.id+'" data-from="'+d+'"':'')+'><b>'+esc(st.location||'Unnamed stay')+'</b>'+'<span>'+(L.stays?(st.name?esc(st.name)+' · ':'')+mk[1]:mk[1].charAt(0))+'</span>'+'</div>'}).join('')+'</div></div>'}
-      var body='';
-      if(L.places){
+      var body='',fl=(inTrip&&!o.am.length&&!o.pm.length)?flightOn(d,false):null;
+      if(L.places&&fl)body='<div class="half full fly"><div class="blks"><div class="blk" style="background:var(--slate)"><b>✈️ Flying</b><span>'+esc((fl.from||'?')+' → '+(fl.to||'?'))+'</span></div></div></div>';
+      else if(L.places){
         if(same&&o.am.length)body=blk(o.pm,'').replace('class="half"','class="half full"');
         else if(o.am.length||o.pm.length||(inTrip&&d<c.end))body=blk(o.am,'Until 12pm',inTrip&&d>c.start&&d<c.end)+blk(o.pm,'From 12pm',inTrip&&d>=c.start&&d<c.end);
       }
