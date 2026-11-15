@@ -677,20 +677,23 @@ function vPlan(){
     if(cand.length){i=cand[0];cand.forEach(function(j){var s=stays[j];if(o.date&&s.checkIn&&s.checkOut&&o.date>=s.checkIn&&o.date<=s.checkOut)i=j})}
     else if(o.date)stays.forEach(function(s,j){if(i<0&&s.checkIn&&s.checkOut&&o.date>=s.checkIn&&o.date<=s.checkOut)i=j});
     if(i>=0)acts[i].push(o);else loose.push(o)});
+  var startX=[],endX=[];
+  stays.forEach(function(s,i){
+    if(arrive[i].length){if(i>0)legs[i-1]=legs[i-1].concat(arrive[i]);else startX=startX.concat(arrive[i])}
+    if(depart[i].length){if(i<n-1)legs[i]=legs[i].concat(depart[i]);else endX=endX.concat(depart[i])}
+  });
   var h='<p class="how">Tap any item to open it and fill in the details: dates, status, cost, who paid, notes. Places follow your stays in date order, with the journeys between them. Costs are in AUD. Set Status to Paid once an item is fully paid, then choose who paid. The share is the dollar amount of that cost the '+esc(c.p1)+' are responsible for; leave it blank for 50/50.</p><div class="itin">';
   if(!n)h+='<div class="card empty" style="padding:18px">No places yet. Add your first stay to start the itinerary.</div>';
-  if(n)h+=flightsCard('out',outsL,stays[0],c)+'<div class="leg slim"></div>';
+  if(n)h+=flightsCard('out',outsL,stays[0],c)+(startX.length?'<div class="leg"><div class="lbl">Travel to '+esc(stays[0].location||'first place')+'</div>'+startX.map(function(t){return jrow(t,c)}).join('')+'</div>':'<div class="leg slim"></div>');
   stays.forEach(function(s,i){
     var bg=col[norm(s.location)]||'var(--slate)',nn=nightsOf(s.checkIn,s.checkOut),tot=(+s.cost||0);acts[i].forEach(function(o){tot+=(+o.cost||0)});
     var hOpen=!!EXP['stays/'+s.id];h+='<div class="pbox"><div class="phead tap" data-exp="stays/'+esc(s.id)+'" tabindex="0" role="button" aria-expanded="'+hOpen+'" title="Tap to change the place, dates and stay details" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+'</small></div><span class="ptail">'+(tot?'<span class="ptot">'+money(tot)+'</span>':'')+'<span class="pedit">'+(hOpen?'Close ▾':'Edit ▸')+'</span></span></div>'+(hOpen?editor('stays',s,c):'');
-    if(arrive[i].length)h+='<div class="sect"><div class="lbl">Getting here</div>'+arrive[i].map(function(t){return jrow(t,c)}).join('')+'</div>';
     h+='<div class="sect"><div class="lbl">Stay · arrive from 12pm, leave by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'Stay (no name yet)'),esc('Arrive '+dayf(s.checkIn)+' · leave '+dayf(s.checkOut)),c,true)+'</div>';
     h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
-    if(depart[i].length)h+='<div class="sect"><div class="lbl">Heading on</div>'+depart[i].map(function(t){return jrow(t,c)}).join('')+'</div>';
     h+='</div>';
     if(i<n-1){var nx=stays[i+1];var au=legAuto(s,nx);h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+(legs[i].length?legs[i].map(function(t){return jrow(t,c)}).join(''):'<div class="item auto"><div class="irow" data-autoleg="'+esc(s.id+'|'+nx.id)+'" tabindex="0" role="button"><span class="ic">🧭</span><div class="it"><b>'+esc((au.from||'?')+' → '+(au.to||'?'))+'</b><small>'+esc(dayf(au.date))+' · filled in from the two cards · tap to add train, flight, cost…</small></div><span class="chipst todo">Add details</span><span class="chev">▸</span></div></div>')+(legs[i].length?addb('travel','Add another journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||'',lf:s.id,lt:nx.id}):'')+'</div>'}
   });
-  if(n){var lastS=stays[n-1];for(var q=n-1;q>=0;q--)if(stays[q].checkOut){lastS=stays[q];break}h+='<div class="leg slim"></div>'+flightsCard('home',homesL,lastS,c)}
+  if(n){var lastS=stays[n-1];for(var q=n-1;q>=0;q--)if(stays[q].checkOut){lastS=stays[q];break}h+=(endX.length?'<div class="leg"><div class="lbl">Travel on from '+esc(lastS.location||'last place')+'</div>'+endX.map(function(t){return jrow(t,c)}).join('')+'</div>':'<div class="leg slim"></div>')+flightsCard('home',homesL,lastS,c)}
   h+='</div><div class="itinfoot">'+addb('stays','Add a place',{})+'</div>';
   if(stray.length)h+='<section class="card"><div class="cardhead"><div><h2>Journeys not linked to a place</h2><p>Their From and To do not match any stay.</p></div></div><div class="sect">'+stray.map(function(t){return jrow(t,c)}).join('')+'</div></section>';
   if(loose.length)h+='<section class="card"><div class="cardhead"><div><h2>Other bookings not linked to a place</h2><p>Set the place or a date that falls in a stay and they will move into its box.</p></div></div><div class="sect">'+loose.map(function(o){return arow(o,c)}).join('')+addb('other','Add booking',{})+'</div></section>';
