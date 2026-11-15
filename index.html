@@ -3,7 +3,7 @@
 <title>Europe 2027 Trip Tracker</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: sticky header with tabs over one working column. Calendar = weeks of day boxes (location band, stay, travel, notes); Trip plan = three editable tables that feed everything else. */
+/* Layout: sticky header with tabs over one working column. Calendar = weeks of day boxes (location band, stay, travel, notes); Itinerary = three editable tables that feed everything else. */
 :root{
   --bg:#F3F6FA; --surface:#FFFFFF; --ink:#14243D; --muted:#5A6A82; --line:#DAE1EA;
   --blue:#4F7AA6; --blue-soft:#E4ECF5; --accent:#B5452C; --accent-soft:#F7E4DD; --sand:#EEE6D6;
@@ -174,6 +174,29 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .pdl{display:flex;flex-direction:column;font-size:11px;font-weight:700;color:var(--muted);gap:2px}.pdl .in{width:140px}
 .pn{min-width:90px}
 @media (max-width:700px){.cday.blank{display:none}}
+.itin{max-width:780px;margin:0 auto;display:flex;flex-direction:column;padding:0 0 8px}
+.pbox{border:1px solid var(--line);border-radius:20px;background:var(--surface);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.phead{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;padding:14px 18px;color:#fff}
+.phead h3{margin:0;font-family:var(--display);font-size:24px;line-height:1.1}.phead small{font-size:13px;font-weight:600;opacity:.92}
+.ptot{background:rgba(255,255,255,.22);padding:3px 10px;border-radius:99px;font-weight:700;font-size:13px}
+.sect{padding:6px 14px 8px}.sect+.sect{border-top:1px dashed var(--line)}
+.sect>.lbl,.leg>.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:800;padding:6px 2px 2px}
+.item{border:1px solid var(--line);border-radius:14px;background:var(--bg);margin:6px 0;overflow:hidden}
+.item.open{border-color:var(--blue);background:var(--surface)}
+.irow{display:flex;gap:10px;align-items:center;padding:10px 12px;cursor:pointer;outline:none}
+.irow:hover,.irow:focus-visible{background:var(--blue-soft)}
+.ic{font-size:18px;flex:none;width:26px;text-align:center}
+.it{flex:1;min-width:0;display:flex;flex-direction:column}.it b{font-size:14px;overflow-wrap:anywhere}.it small{color:var(--muted);font-size:12px}
+.chipst{font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.cost{font-weight:700;font-size:13px;white-space:nowrap}.chev{color:var(--muted);flex:none}
+.iedit{border-top:1px solid var(--line);padding:2px 0 12px}
+.iedit .formgrid{padding:10px 14px 4px}.iedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}.iedit label.wide{grid-column:1/-1}
+.iact{display:flex;justify-content:space-between;align-items:center;padding:6px 14px 0}
+.leg{width:calc(100% - 56px);margin:0 auto;padding:8px 16px 10px;background:var(--blue-soft);border-left:1px solid var(--line);border-right:1px solid var(--line);position:relative}
+.leg::before{content:"";position:absolute;left:-1px;top:0;bottom:0;border-left:3px dashed var(--blue)}
+.leg .item{background:var(--surface)}
+.addb{margin:4px 0 2px;border-style:dashed}
+.itinfoot{max-width:780px;margin:14px auto 24px}
 
 /* standalone page basics */
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -203,7 +226,7 @@ var TYPES=['Flight','Train','Car hire','Bus','Ferry','Taxi','Other'];
 var CATS=['Experience / tour','Food & dining','Tickets / entry','Travel insurance','Visa / documents','eSIM / data','Other'];
 var PAL=['#2F5D8A','#C8553D','#2E8B7A','#8A6BB0','#D08C2B','#4E8F4A','#B2456E','#5B6C7D','#7C5E3C','#3F8FB5'];
 var DEF={p1:'Thrupps',p2:'Ameer-Begs',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
-var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Trip plan'],['setup','Setup']];
+var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Itinerary'],['setup','Setup']];
 var S={stays:{},travel:{},other:{},days:{},payments:{},settings:null};
 var db=null,RO=false,noDb=false,timedOut=false,needRender=false,pendingEdits=0,inflight=0,writeFail=false;
 var AUTH='loading',AUTHMSG='',AUTHEMAIL='',PENDING_LINK=false,IMPORT=null,IMPORTERR='',USERMAIL='',auth=null,fs=null,unsubs=[];
@@ -358,9 +381,9 @@ function vSummary(){
   var verdict=sq?'All square. Nobody owes anything right now.':(m.balance>0?esc(c.p2)+' owe '+esc(c.p1)+' '+money(m.balance,2):esc(c.p1)+' owe '+esc(c.p2)+' '+money(-m.balance,2));
   var keys=Object.keys(m.types),maxc=Math.max.apply(null,keys.map(function(k){return m.types[k].cost}).concat([1]));
   var rows=keys.map(function(k){var x=m.types[k];return '<tr><td class="c">'+esc(k)+'<span class="catbar" style="width:'+(x.cost/maxc*100)+'%"></span></td><td class="n c">'+mny(x.cost)+'</td><td class="n c">'+mny(x.paid)+'</td><td class="n c">'+mny(x.cost-x.paid)+'</td></tr>'}).join('');
-  var warn=m.missing?'<div class="notice">'+m.missing+' item'+(m.missing>1?'s are':' is')+' marked Paid without a Paid by, so '+(m.missing>1?'they are':'it is')+' left out of the split. Fix it on the Trip plan tab.</div>':'';
-  return (isEmpty()?'<div class="notice">Nothing here yet. Open Setup to import your starter data, or add rows on the Trip plan tab.</div>':'')+(VIEW!=='all'?'<div class="notice">The Summary always shows the whole trip, not just your view.</div>':'')+warn+'<section class="tiles">'+tile('Total cost',money(m.cost))+tile('Paid so far',money(m.paid),'<div class="bar"><i style="width:'+pct+'%"></i></div>')+tile('Yet to pay',money(m.yet))+tile('Booked or paid',m.done+' of '+m.n)+'</section>'+
-  '<section class="card"><div class="cardhead"><div><h2>Who owes who</h2><p>Based on items marked Paid, using the share amounts on the Trip plan tab.</p></div></div>'+
+  var warn=m.missing?'<div class="notice">'+m.missing+' item'+(m.missing>1?'s are':' is')+' marked Paid without a Paid by, so '+(m.missing>1?'they are':'it is')+' left out of the split. Fix it on the Itinerary tab.</div>':'';
+  return (isEmpty()?'<div class="notice">Nothing here yet. Open Setup to import your starter data, or add rows on the Itinerary tab.</div>':'')+(VIEW!=='all'?'<div class="notice">The Summary always shows the whole trip, not just your view.</div>':'')+warn+'<section class="tiles">'+tile('Total cost',money(m.cost))+tile('Paid so far',money(m.paid),'<div class="bar"><i style="width:'+pct+'%"></i></div>')+tile('Yet to pay',money(m.yet))+tile('Booked or paid',m.done+' of '+m.n)+'</section>'+
+  '<section class="card"><div class="cardhead"><div><h2>Who owes who</h2><p>Based on items marked Paid, using the share amounts on the Itinerary tab.</p></div></div>'+
     '<div class="verdict '+(sq?'sq':'owe')+'">'+verdict+'</div><div class="tbl-wrap"><table class="plain"><thead><tr><th></th><th class="n">'+esc(c.p1)+'</th><th class="n">'+esc(c.p2)+'</th></tr></thead><tbody>'+
     '<tr><td>Paid to suppliers so far</td><td class="n">'+mny(m.paid1)+'</td><td class="n">'+mny(m.paid2)+'</td></tr>'+
     '<tr><td>Fair share of that</td><td class="n">'+mny(m.fair1)+'</td><td class="n">'+mny(m.fair2)+'</td></tr>'+
@@ -420,7 +443,7 @@ function planCommit(){
   });
   PLAN.ids.forEach(function(id){var d=PLAN.d[id];if(d.checkIn!==PLAN.base[id].checkIn||d.checkOut!==PLAN.base[id].checkOut){var pt={checkIn:d.checkIn,checkOut:d.checkOut};applyLocal('stays',id,pt);save('stays',id,pt);moved++}});
   Object.keys(jpatch).forEach(function(id){applyLocal('travel',id,jpatch[id]);save('travel',id,jpatch[id]);jm++});
-  PLAN.on=false;PLAN.msgAt=Date.now();PLAN.msg=moved?('Dates set: '+moved+' stay'+(moved>1?'s':'')+' updated'+(jm?' and '+jm+' journey'+(jm>1?'s':'')+' moved':'')+' in the Trip plan.'):'';
+  PLAN.on=false;PLAN.msgAt=Date.now();PLAN.msg=moved?('Dates set: '+moved+' stay'+(moved>1?'s':'')+' updated'+(jm?' and '+jm+' journey'+(jm>1?'s':'')+' moved':'')+' in the Itinerary.'):'';
   render();
 }
 /* ---- leave days ---- */
@@ -454,24 +477,24 @@ function vCalendarInner(c,P){
   var col={},order=[];
   stays.forEach(function(s){var k=norm(s.location);if(k&&!(k in col)){col[k]=PAL[order.length%PAL.length];order.push(s.location)}});
   var iss=issues();
-  var box=iss.length?iss.map(function(t){return '<li>'+esc(t)+' <a href="#plan">Fix in Trip plan</a></li>'}).join(''):'<li class="ok">No gaps or mismatches between your stays and journeys.</li>';
+  var box=iss.length?iss.map(function(t){return '<li>'+esc(t)+' <a href="#plan">Fix in Itinerary</a></li>'}).join(''):'<li class="ok">No gaps or mismatches between your stays and journeys.</li>';
   var h='';
   if(PLAN.msg&&Date.now()-PLAN.msgAt<10000)h+='<div class="notice okmsg">'+esc(PLAN.msg)+'</div>';
   if(P){
     var ch=planChanged();
-    h+='<section class="card plan"><div class="cardhead"><div><h2>Plan mode</h2><p>Drag a place block onto any date, or use the date boxes and buttons. Places can overlap on the same date. Nothing changes in the Trip plan until you press Set dates.</p></div><div class="planbtns"><button class="btn primary" data-plan="commit"'+(ch&&!RO?'':' disabled')+'>Set dates</button><button class="btn" data-plan="reset"'+(ch?'':' disabled')+'>Reset</button><button class="btn" data-plan="off">Cancel</button></div></div>'+
+    h+='<section class="card plan"><div class="cardhead"><div><h2>Plan mode</h2><p>Drag a place block onto any date, or use the date boxes and buttons. Places can overlap on the same date. Nothing changes in the Itinerary until you press Set dates.</p></div><div class="planbtns"><button class="btn primary" data-plan="commit"'+(ch&&!RO?'':' disabled')+'>Set dates</button><button class="btn" data-plan="reset"'+(ch?'':' disabled')+'>Reset</button><button class="btn" data-plan="off">Cancel</button></div></div>'+
       '<div class="planlist">'+(PLAN.ids.length?PLAN.ids.map(function(id){
         var s=S.stays[id]||{},d=PLAN.d[id],b=PLAN.base[id],mv=(d.checkIn!==b.checkIn||d.checkOut!==b.checkOut),n=nightsOf(d.checkIn,d.checkOut);
         return '<div class="prow'+(mv?' moved':'')+'"><span class="pdot" style="background:'+(col[norm(s.location)]||'var(--slate)')+'"></span><b class="pn">'+esc(s.location||'Unnamed')+'</b>'+
           '<label class="pdl">Arrive <input class="in" type="date" data-pf="in" data-id="'+id+'" value="'+d.checkIn+'"></label><label class="pdl">Leave <input class="in" type="date" data-pf="out" data-id="'+id+'" value="'+d.checkOut+'"></label>'+
           '<span class="pd">'+n+' night'+(n>1?'s':'')+(mv?' <i>(was '+dfmt(b.checkIn,{day:'numeric',month:'short'})+' – '+dfmt(b.checkOut,{day:'numeric',month:'short'})+')</i>':'')+'</span>'+
           '<span class="pbtn"><button class="btn sm" data-plan="dm" data-id="'+id+'">◀ day</button><button class="btn sm" data-plan="dp" data-id="'+id+'">day ▶</button><button class="btn sm" data-plan="nm" data-id="'+id+'"'+(n>1?'':' disabled')+'>− night</button><button class="btn sm" data-plan="np" data-id="'+id+'">+ night</button></span></div>'
-      }).join(''):'<div class="empty" style="padding:10px 16px">No stays with check-in and check-out dates yet. Add them in the Trip plan tab first.</div>')+'</div>'+
+      }).join(''):'<div class="empty" style="padding:10px 16px">No stays with check-in and check-out dates yet. Add them in the Itinerary tab first.</div>')+'</div>'+
       '<label class="chipck pj"><input type="checkbox" data-plan="movej"'+(PLAN.moveJ?' checked':'')+'> Also move journeys that arrive on a check-in day or leave on a check-out day</label></section>';
   }
   h+='<section class="card"><div class="cardhead"><div><h2>Things to check</h2><p>'+(P?'Updates as you plan, using the new dates.':'Compares your stays with your journeys.')+'</p></div></div><ul class="issues">'+box+'</ul></section>';
   var lv=leaveCalc(c);
-  h+='<section class="card"><div class="cardhead"><div><h2>Trip calendar</h2><p>'+(P?'Showing places only while planning.':'You arrive and leave at midday. Dates, stays, travel and status come from the Trip plan tab.')+'</p></div>'+(P?'':'<button class="btn" data-plan="on"'+(RO?' disabled':'')+'>Plan mode</button>')+'</div>'+
+  h+='<section class="card"><div class="cardhead"><div><h2>Trip calendar</h2><p>'+(P?'Showing places only while planning.':'You arrive and leave at midday. Dates, stays, travel and status come from the Itinerary tab.')+'</p></div>'+(P?'':'<button class="btn" data-plan="on"'+(RO?' disabled':'')+'>Plan mode</button>')+'</div>'+
     (P?'':'<div class="leavebar"><b>'+esc(c.p1)+' leave days used: '+f1(lv.total)+'</b><span>'+f1(lv.before)+' before August + '+f1(lv.trip)+' on the trip ('+lv.n+' weekdays'+(lv.free?' less '+f1(lv.free)+' free':'')+') + '+f1(lv.sep)+' extra in September</span></div>')+
     (P?'':'<div class="calbar"><span class="lbl">Show</span>'+chip('places','Places')+chip('stays','Stay names')+chip('travel','Journeys')+chip('other','Other bookings')+chip('notes','Notes')+chip('leave','Leave days')+'<button class="btn sm" data-lay-only="places">Places only</button><button class="btn sm" data-lay-only="all">Show all</button></div>')+
     '<div class="legend">'+order.map(function(l){return '<span class="lg" style="background:'+col[norm(l)]+'">'+esc(l)+'</span>'}).join('')+
@@ -542,20 +565,74 @@ document.addEventListener('dragstart',function(e){var d=e.target.closest&&e.targ
 document.addEventListener('dragend',function(){dragSid=null;document.querySelectorAll('.dragging,.dropt').forEach(function(x){x.classList.remove('dragging','dropt')})});
 document.addEventListener('dragover',function(e){var d=e.target.closest&&e.target.closest('.cday[data-day]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();document.querySelectorAll('.dropt').forEach(function(x){x.classList.remove('dropt')});d.classList.add('dropt')});
 document.addEventListener('drop',function(e){var d=e.target.closest&&e.target.closest('.cday[data-day]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();var n=nightsOf(dragFrom,d.dataset.day),id=dragSid;dragSid=null;if(n){planShift(id,n);render()}});
+var EXP={};
+var ICON={Flight:'✈️',Train:'🚆','Car hire':'🚗',Bus:'🚌',Ferry:'⛴️',Taxi:'🚕',Other:'🧭'};
+var dayf=function(d){return d?dfmt(d,{weekday:'short',day:'numeric',month:'short'}):'no date'};
+function lab(t,inner,cls){return '<label'+(cls?' class="'+cls+'"':'')+'>'+t+inner+'</label>'}
+function payFields(coll,it,c){
+  var needs=(it.status==='Paid'&&!it.paidBy)?'needs':'';
+  return lab('For',sel(coll,it.id,'for',forOf(it),[['shared','Shared'],['1',c.p1+' only'],['2',c.p2+' only']]))+lab('Status',sel(coll,it.id,'status',it.status,STATUS,'st-'+it.status))+
+    lab('Cost (AUD)',fld(coll,it.id,'cost',it.cost,'num','0.00'))+lab('Paid by',sel(coll,it.id,'paidBy',it.paidBy||'',[['',''],['1',c.p1],['2',c.p2]],needs))+
+    lab(esc(c.p1)+' share (AUD)',fld(coll,it.id,'share',it.share,'num',forOf(it)==='1'?'all':(forOf(it)==='2'?'0':'50/50')));
+}
+function editor(coll,it,c){
+  var i=it.id,f='';
+  if(coll==='stays')f=lab('Place',fld(coll,i,'location',it.location))+lab('Arrive (from 12pm)',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Leave (by 12pm)',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Stay name',fld(coll,i,'name',it.name));
+  else if(coll==='travel')f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('From',fld(coll,i,'from',it.from))+lab('To',fld(coll,i,'to',it.to))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
+  else f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('What',fld(coll,i,'item',it.item))+lab('Place',fld(coll,i,'location',it.location))+lab('Category',sel(coll,i,'category',it.category,CATS))+lab('Provider',fld(coll,i,'provider',it.provider));
+  return '<div class="iedit"><div class="formgrid">'+f+payFields(coll,it,c)+lab('Notes, booking ref or link',fld(coll,i,'notes',it.notes),'wide')+'</div><div class="iact">'+delBtn(coll,i)+'<button class="btn sm" data-exp="'+coll+'/'+esc(i)+'">Done</button></div></div>';
+}
+function irow(coll,it,icon,title,sub,c){
+  var key=coll+'/'+esc(it.id),open=!!EXP[coll+'/'+it.id],mk=mark(it.status),cost=+it.cost||0;
+  return '<div class="item'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">'+icon+'</span><div class="it"><b>'+title+tagOf(it)+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div><span class="chipst '+mk[0]+'">'+mk[1]+'</span>'+(cost?'<span class="cost">'+money(cost)+'</span>':'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open?editor(coll,it,c):'')+'</div>';
+}
+function jrow(t,c){return irow('travel',t,ICON[t.type]||'🧭',esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')),esc(dayf(t.date)+(t.provider?' · '+t.provider:'')),c)}
+function arow(o,c){return irow('other',o,'🎟️',esc(o.item||'New activity'),esc(dayf(o.date)+(o.category?' · '+o.category:'')+(o.provider?' · '+o.provider:'')),c)}
+function addb(kind,label,at){var a='';Object.keys(at||{}).forEach(function(k){a+=' data-'+k+'="'+esc(at[k])+'"'});return '<button class="btn sm addb" data-iadd="'+kind+'"'+a+(RO?' disabled':'')+'>+ '+label+'</button>'}
 function vPlan(){
   var c=cfg();
-  var sRows=arr(S.stays).filter(vis).sort(byDate('checkIn')).map(function(s){
-    return '<tr><td style="min-width:120px">'+fld('stays',s.id,'location',s.location)+'</td><td>'+fld('stays',s.id,'checkIn',s.checkIn,'date')+'</td><td>'+fld('stays',s.id,'checkOut',s.checkOut,'date')+'</td><td class="n c">'+nightsOf(s.checkIn,s.checkOut)+'</td><td style="min-width:190px">'+fld('stays',s.id,'name',s.name)+'</td>'+payCols('stays',s,c)+'<td style="min-width:200px">'+fld('stays',s.id,'notes',s.notes)+'</td><td>'+delBtn('stays',s.id)+'</td></tr>'}).join('');
-  var tRows=arr(S.travel).filter(vis).sort(byDate('date')).map(function(t){
-    return '<tr><td>'+fld('travel',t.id,'date',t.date,'date')+'</td><td style="min-width:110px">'+fld('travel',t.id,'from',t.from)+'</td><td style="min-width:110px">'+fld('travel',t.id,'to',t.to)+'</td><td>'+sel('travel',t.id,'type',t.type,TYPES)+'</td><td style="min-width:150px">'+fld('travel',t.id,'provider',t.provider)+'</td>'+payCols('travel',t,c)+'<td style="min-width:200px">'+fld('travel',t.id,'notes',t.notes)+'</td><td>'+delBtn('travel',t.id)+'</td></tr>'}).join('');
-  var oRows=arr(S.other).filter(vis).sort(byDate('date')).map(function(o){
-    return '<tr><td>'+fld('other',o.id,'date',o.date,'date')+'</td><td style="min-width:190px">'+fld('other',o.id,'item',o.item)+'</td><td style="min-width:110px">'+fld('other',o.id,'location',o.location)+'</td><td>'+sel('other',o.id,'category',o.category,CATS)+'</td><td style="min-width:140px">'+fld('other',o.id,'provider',o.provider)+'</td>'+payCols('other',o,c)+'<td style="min-width:200px">'+fld('other',o.id,'notes',o.notes)+'</td><td>'+delBtn('other',o.id)+'</td></tr>'}).join('');
-  var empty=function(n,t){return '<tr><td colspan="'+n+'" class="empty">'+t+'</td></tr>'};
-  return '<p class="how">Costs are in AUD. Set Status to Paid once an item is fully paid, then choose who paid. The share is the dollar amount of that cost the '+esc(c.p1)+' are responsible for; leave it blank for a 50/50 split (or all theirs if the row is tagged for one party only). Tag each row Shared or for one party, then use the Viewing selector at the top to see just your own items plus shared ones.</p>'+
-  '<section class="card"><div class="cardhead"><div><h2>Where we’re staying</h2><p>One row per stay. The Calendar reads from this.</p></div>'+addBtn('stays','Add stay')+'</div><div class="tbl-wrap"><table style="min-width:1380px"><thead><tr><th>Location</th><th>Check in</th><th>Check out</th><th class="n">Nights</th><th>Stay name</th>'+payHead(c)+'<th>Ref / notes</th><th></th></tr></thead><tbody>'+(sRows||empty(12,'No stays yet. Add the first one.'))+'</tbody></table></div></section>'+
-  '<section class="card"><div class="cardhead"><div><h2>Getting around</h2><p>Flights, trains, hire cars and ferries between places.</p></div>'+addBtn('travel','Add journey')+'</div><div class="tbl-wrap"><table style="min-width:1380px"><thead><tr><th>Date</th><th>From</th><th>To</th><th>Type</th><th>Provider</th>'+payHead(c)+'<th>Ref / notes</th><th></th></tr></thead><tbody>'+(tRows||empty(12,'No journeys yet. Add the first one.'))+'</tbody></table></div></section>'+
-  '<section class="card"><div class="cardhead"><div><h2>Other bookings</h2><p>Tours, experiences, tickets, insurance and anything that isn’t a stay or a journey.</p></div>'+addBtn('other','Add booking')+'</div><div class="tbl-wrap"><table style="min-width:1380px"><thead><tr><th>Date</th><th>Item</th><th>Location</th><th>Category</th><th>Provider</th>'+payHead(c)+'<th>Ref / notes</th><th></th></tr></thead><tbody>'+(oRows||empty(12,'Nothing here yet. Add the first booking.'))+'</tbody></table></div></section>';
+  var stays=arr(S.stays).filter(vis).sort(byDate('checkIn')),trv=arr(S.travel).filter(vis).sort(byDate('date')),oth=arr(S.other).filter(vis).sort(byDate('date'));
+  var col={},ci=0;stays.forEach(function(s){var k=norm(s.location);if(k&&!(k in col))col[k]=PAL[ci++%PAL.length]});
+  var n=stays.length,arrive=[],depart=[],legs=[],acts=[],stray=[],loose=[];
+  stays.forEach(function(){arrive.push([]);depart.push([]);legs.push([]);acts.push([])});
+  var dist=function(a,b){var x=nightsOf(a,b);return x===''?99999:Math.abs(x)};
+  var best=function(loc,date,key){var bi=-1,bd=1e9;if(!norm(loc))return -1;stays.forEach(function(s,i){if(norm(s.location)===norm(loc)){var d=dist(date,s[key]);if(d<bd){bd=d;bi=i}}});return bi};
+  trv.forEach(function(t){var fi=best(t.from,t.date,'checkOut'),ti=best(t.to,t.date,'checkIn');
+    if(fi>=0&&ti===fi+1)legs[fi].push(t);else if(ti>=0)arrive[ti].push(t);else if(fi>=0)depart[fi].push(t);else stray.push(t)});
+  oth.forEach(function(o){var i=-1,cand=[];
+    if(norm(o.location))stays.forEach(function(s,j){if(norm(s.location)===norm(o.location))cand.push(j)});
+    if(cand.length){i=cand[0];cand.forEach(function(j){var s=stays[j];if(o.date&&s.checkIn&&s.checkOut&&o.date>=s.checkIn&&o.date<=s.checkOut)i=j})}
+    else if(o.date)stays.forEach(function(s,j){if(i<0&&s.checkIn&&s.checkOut&&o.date>=s.checkIn&&o.date<=s.checkOut)i=j});
+    if(i>=0)acts[i].push(o);else loose.push(o)});
+  var h='<p class="how">Tap any item to open it and fill in the details: dates, status, cost, who paid, notes. Places follow your stays in date order, with the journeys between them. Costs are in AUD. Set Status to Paid once an item is fully paid, then choose who paid. The share is the dollar amount of that cost the '+esc(c.p1)+' are responsible for; leave it blank for 50/50.</p><div class="itin">';
+  if(!n)h+='<div class="card empty" style="padding:18px">No places yet. Add your first stay to start the itinerary.</div>';
+  stays.forEach(function(s,i){
+    var bg=col[norm(s.location)]||'var(--slate)',nn=nightsOf(s.checkIn,s.checkOut),tot=(+s.cost||0);acts[i].forEach(function(o){tot+=(+o.cost||0)});
+    h+='<div class="pbox"><div class="phead" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+'</small></div>'+(tot?'<span class="ptot">'+money(tot)+'</span>':'')+'</div>';
+    if(arrive[i].length||i===0)h+='<div class="sect"><div class="lbl">Getting here</div>'+arrive[i].map(function(t){return jrow(t,c)}).join('')+(i===0?addb('travel','Add journey',{to:s.location||'',date:s.checkIn||''}):'')+'</div>';
+    h+='<div class="sect"><div class="lbl">Stay · arrive from 12pm, leave by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'Stay (no name yet)'),esc('Arrive '+dayf(s.checkIn)+' · leave '+dayf(s.checkOut)),c)+'</div>';
+    h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
+    if(depart[i].length||i===n-1)h+='<div class="sect"><div class="lbl">Heading on</div>'+depart[i].map(function(t){return jrow(t,c)}).join('')+(i===n-1?addb('travel','Add journey',{from:s.location||'',date:s.checkOut||''}):'')+'</div>';
+    h+='</div>';
+    if(i<n-1){var nx=stays[i+1];h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+legs[i].map(function(t){return jrow(t,c)}).join('')+addb('travel','Add journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||''})+'</div>'}
+  });
+  h+='</div><div class="itinfoot">'+addb('stays','Add a place',{})+'</div>';
+  if(stray.length)h+='<section class="card"><div class="cardhead"><div><h2>Journeys not linked to a place</h2><p>Their From and To do not match any stay.</p></div></div><div class="sect">'+stray.map(function(t){return jrow(t,c)}).join('')+'</div></section>';
+  if(loose.length)h+='<section class="card"><div class="cardhead"><div><h2>Other bookings not linked to a place</h2><p>Set the place or a date that falls in a stay and they will move into its box.</p></div></div><div class="sect">'+loose.map(function(o){return arow(o,c)}).join('')+addb('other','Add booking',{})+'</div></section>';
+  return h;
 }
+document.addEventListener('click',function(e){
+  var el=e.target.closest&&e.target.closest('[data-exp]');
+  if(el){var k=el.dataset.exp;EXP[k]=!EXP[k];render();return}
+  var b=e.target.closest&&e.target.closest('button[data-iadd]');if(!b||RO)return;
+  var kd=b.dataset.iadd,pay={status:'Researching',for:(VIEW==='all'?'shared':VIEW),cost:null,paidBy:'',share:null,notes:''},id;
+  if(kd==='stays')id=add('stays',Object.assign({location:'',checkIn:b.dataset.date||'',checkOut:'',name:''},pay));
+  else if(kd==='travel')id=add('travel',Object.assign({date:b.dataset.date||'',from:b.dataset.from||'',to:b.dataset.to||'',type:'Train',provider:''},pay));
+  else id=add('other',Object.assign({date:b.dataset.date||'',item:'',location:b.dataset.loc||'',category:'Experience / tour',provider:''},pay));
+  if(!id)return;EXP[kd+'/'+id]=true;render();
+  var f=document.getElementById(kd+'-'+id+'-'+(kd==='stays'?'location':kd==='travel'?'from':'item'));if(f)f.focus();
+});
+document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&e.target.classList.contains('irow')){e.preventDefault();var k=e.target.dataset.exp;EXP[k]=!EXP[k];render()}});
 function vSetup(){
   var c=cfg(),n=nightsOf(c.start,c.end);
   return '<section class="card"><div class="cardhead"><div><h2>Travelling parties</h2></div></div><div class="formgrid"><label>First party<input class="in" id="meta-settings-p1" data-c="meta" data-i="settings" data-f="p1" data-t="text" value="'+esc(c.p1)+'" autocomplete="off"></label><label>Second party<input class="in" id="meta-settings-p2" data-c="meta" data-i="settings" data-f="p2" data-t="text" value="'+esc(c.p2)+'" autocomplete="off"></label></div></section>'+
@@ -660,7 +737,7 @@ function renderHead(){
   $('#sub').textContent=(c.start&&c.end)?dfmt(c.start,{day:'numeric',month:'short'})+' – '+dfmt(c.end,{day:'numeric',month:'short',year:'numeric'})+(n!==''?' · '+n+' nights':'')+' · '+c.p1+' & '+c.p2:'';
   var vs=$('#viewas');if(vs)vs.innerHTML=[['all','Everyone'],['1',c.p1+' + shared'],['2',c.p2+' + shared']].map(function(o){return '<option value="'+o[0]+'"'+(o[0]===VIEW?' selected':'')+'>'+esc(o[1])+'</option>'}).join('');
 }
-function lock(){document.querySelectorAll('#view input,#view select,#view textarea,#view button[data-add],#view button[data-del]').forEach(function(e){e.disabled=true})}
+function lock(){document.querySelectorAll('#view input,#view select,#view textarea,#view button[data-add],#view button[data-iadd],#view button[data-del]').forEach(function(e){e.disabled=true})}
 function render(){
   needRender=false;
   var ae=document.activeElement,v=$('#view'),fid=(ae&&ae.id&&v.contains(ae))?ae.id:null,ss=null,se=null;
