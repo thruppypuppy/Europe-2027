@@ -198,6 +198,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .leg .item{background:var(--surface)}
 .addb{margin:4px 0 2px;border-style:dashed}
 .itinfoot{margin:14px 0 24px;text-align:center}
+.legnote{margin:10px 14px 0;padding:8px 12px;border-radius:10px;background:var(--blue-soft);font-size:12.5px;line-height:1.45}.legnote .btn{margin-left:6px}.item.auto{border-style:dashed}
 
 /* standalone page basics */
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -566,6 +567,27 @@ document.addEventListener('dragstart',function(e){var d=e.target.closest&&e.targ
 document.addEventListener('dragend',function(){dragSid=null;document.querySelectorAll('.dragging,.dropt').forEach(function(x){x.classList.remove('dragging','dropt')})});
 document.addEventListener('dragover',function(e){var d=e.target.closest&&e.target.closest('.cday[data-day]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();document.querySelectorAll('.dropt').forEach(function(x){x.classList.remove('dropt')});d.classList.add('dropt')});
 document.addEventListener('drop',function(e){var d=e.target.closest&&e.target.closest('.cday[data-day]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();var n=nightsOf(dragFrom,d.dataset.day),id=dragSid;dragSid=null;if(n){planShift(id,n);render()}});
+function legAuto(A,B){return {from:A.location||'',to:B.location||'',date:A.checkOut||B.checkIn||'',legFrom:A.id,legTo:B.id,sig:[A.id,A.location,A.checkOut,B.id,B.location,B.checkIn].join('|')}}
+var syncT=null;
+function scheduleSync(){if(syncT)return;syncT=setTimeout(function(){syncT=null;syncLegs()},60)}
+function syncLegs(){
+  if(RO||PLAN.on||Object.keys(loadedSet).length<NEED)return;
+  var st=arr(S.stays).filter(function(x){return norm(x.location)&&x.checkIn&&x.checkOut&&x.checkOut>x.checkIn}).sort(byDate('checkIn')),pairs={},list=[];
+  for(var i=0;i<st.length-1;i++){var a=legAuto(st[i],st[i+1]);pairs[a.legFrom+'>'+a.legTo]=a;list.push(a)}
+  var n=0;
+  arr(S.travel).forEach(function(t){
+    var pt=null;
+    if(t.legFrom&&t.legTo){var a=pairs[t.legFrom+'>'+t.legTo];
+      if(!a)pt={legFrom:'',legTo:'',sig:''};
+      else if(t.sig!==a.sig)pt={from:a.from,to:a.to,date:a.date,sig:a.sig};
+    }else if(t.from&&t.to){var bd=1e9,bp=null;
+      list.forEach(function(a){if(norm(a.from)===norm(t.from)&&norm(a.to)===norm(t.to)){var d=Math.abs(+nightsOf(t.date||a.date,a.date)||0);if(d<bd){bd=d;bp=a}}});
+      if(bp)pt={legFrom:bp.legFrom,legTo:bp.legTo,sig:bp.sig};
+    }
+    if(pt){applyLocal('travel',t.id,pt);save('travel',t.id,pt);n++}
+  });
+  if(n)render();
+}
 var EXP={};
 var ICON={Flight:'✈️',Train:'🚆','Car hire':'🚗',Bus:'🚌',Ferry:'⛴️',Taxi:'🚕',Other:'🧭'};
 var dayf=function(d){return d?dfmt(d,{weekday:'short',day:'numeric',month:'short'}):'no date'};
@@ -581,7 +603,9 @@ function editor(coll,it,c){
   if(coll==='stays')f=lab('Place',fld(coll,i,'location',it.location))+lab('Arrive (from 12pm)',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Leave (by 12pm)',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Stay name',fld(coll,i,'name',it.name));
   else if(coll==='travel')f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('From',fld(coll,i,'from',it.from))+lab('To',fld(coll,i,'to',it.to))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
   else f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('What',fld(coll,i,'item',it.item))+lab('Place',fld(coll,i,'location',it.location))+lab('Category',sel(coll,i,'category',it.category,CATS))+lab('Provider',fld(coll,i,'provider',it.provider));
-  return '<div class="iedit"><div class="formgrid">'+f+payFields(coll,it,c)+lab('Notes, booking ref or link',fld(coll,i,'notes',it.notes),'wide')+'</div><div class="iact">'+delBtn(coll,i)+'<button class="btn sm" data-exp="'+coll+'/'+esc(i)+'">Done</button></div></div>';
+  var note='';
+  if(coll==='travel'&&it.legFrom&&S.stays[it.legFrom]&&S.stays[it.legTo])note='<div class="legnote">Linked to <b>'+esc((S.stays[it.legFrom].location||'?')+' → '+(S.stays[it.legTo].location||'?'))+'</b>. From, To and Date follow those two cards and reset whenever either card changes. You can overwrite them here. <button class="btn sm" data-relink="'+esc(i)+'">Match the cards now</button></div>';
+  return '<div class="iedit">'+note+'<div class="formgrid">'+f+payFields(coll,it,c)+lab('Notes, booking ref or link',fld(coll,i,'notes',it.notes),'wide')+'</div><div class="iact">'+delBtn(coll,i)+'<button class="btn sm" data-exp="'+coll+'/'+esc(i)+'">Done</button></div></div>';
 }
 function irow(coll,it,icon,title,sub,c){
   var key=coll+'/'+esc(it.id),open=!!EXP[coll+'/'+it.id],mk=mark(it.status),cost=+it.cost||0;
@@ -598,7 +622,10 @@ function vPlan(){
   stays.forEach(function(){arrive.push([]);depart.push([]);legs.push([]);acts.push([])});
   var dist=function(a,b){var x=nightsOf(a,b);return x===''?99999:Math.abs(x)};
   var best=function(loc,date,key){var bi=-1,bd=1e9;if(!norm(loc))return -1;stays.forEach(function(s,i){if(norm(s.location)===norm(loc)){var d=dist(date,s[key]);if(d<bd){bd=d;bi=i}}});return bi};
-  trv.forEach(function(t){var fi=best(t.from,t.date,'checkOut'),ti=best(t.to,t.date,'checkIn');
+  var sidx=function(id){for(var q=0;q<stays.length;q++)if(stays[q].id===id)return q;return -1};
+  trv.forEach(function(t){
+    if(t.legFrom&&t.legTo){var ia=sidx(t.legFrom),ib=sidx(t.legTo);if(ia>=0&&ib===ia+1){legs[ia].push(t);return}}
+    var fi=best(t.from,t.date,'checkOut'),ti=best(t.to,t.date,'checkIn');
     if(fi>=0&&ti===fi+1)legs[fi].push(t);else if(ti>=0)arrive[ti].push(t);else if(fi>=0)depart[fi].push(t);else stray.push(t)});
   oth.forEach(function(o){var i=-1,cand=[];
     if(norm(o.location))stays.forEach(function(s,j){if(norm(s.location)===norm(o.location))cand.push(j)});
@@ -615,7 +642,7 @@ function vPlan(){
     h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
     if(depart[i].length||i===n-1)h+='<div class="sect"><div class="lbl">Heading on</div>'+depart[i].map(function(t){return jrow(t,c)}).join('')+(i===n-1?addb('travel','Add journey',{from:s.location||'',date:s.checkOut||''}):'')+'</div>';
     h+='</div>';
-    if(i<n-1){var nx=stays[i+1];h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+legs[i].map(function(t){return jrow(t,c)}).join('')+addb('travel','Add journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||''})+'</div>'}
+    if(i<n-1){var nx=stays[i+1];var au=legAuto(s,nx);h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+(legs[i].length?legs[i].map(function(t){return jrow(t,c)}).join(''):'<div class="item auto"><div class="irow" data-autoleg="'+esc(s.id+'|'+nx.id)+'" tabindex="0" role="button"><span class="ic">🧭</span><div class="it"><b>'+esc((au.from||'?')+' → '+(au.to||'?'))+'</b><small>'+esc(dayf(au.date))+' · filled in from the two cards · tap to add train, flight, cost…</small></div><span class="chipst todo">Add details</span><span class="chev">▸</span></div></div>')+(legs[i].length?addb('travel','Add another journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||'',lf:s.id,lt:nx.id}):'')+'</div>'}
   });
   h+='</div><div class="itinfoot">'+addb('stays','Add a place',{})+'</div>';
   if(stray.length)h+='<section class="card"><div class="cardhead"><div><h2>Journeys not linked to a place</h2><p>Their From and To do not match any stay.</p></div></div><div class="sect">'+stray.map(function(t){return jrow(t,c)}).join('')+'</div></section>';
@@ -623,17 +650,23 @@ function vPlan(){
   return h;
 }
 document.addEventListener('click',function(e){
+  var al=e.target.closest&&e.target.closest('[data-autoleg]');
+  if(al){if(RO)return;var pr=al.dataset.autoleg.split('|'),A=S.stays[pr[0]],B=S.stays[pr[1]];if(!A||!B)return;
+    var nid=add('travel',Object.assign(legAuto(A,B),{type:'Train',provider:'',status:'Researching',for:(VIEW==='all'?'shared':VIEW),cost:null,paidBy:'',share:null,notes:''}));
+    if(nid){EXP['travel/'+nid]=true;render();var pf=document.getElementById('travel-'+nid+'-provider');if(pf)pf.focus()}return}
+  var rl=e.target.closest&&e.target.closest('button[data-relink]');
+  if(rl){if(RO)return;var jt=S.travel[rl.dataset.relink];if(!jt)return;var A2=S.stays[jt.legFrom],B2=S.stays[jt.legTo];if(!A2||!B2)return;var a2=legAuto(A2,B2),pt={from:a2.from,to:a2.to,date:a2.date,sig:a2.sig};applyLocal('travel',jt.id,pt);save('travel',jt.id,pt);render();return}
   var el=e.target.closest&&e.target.closest('[data-exp]');
   if(el){var k=el.dataset.exp;EXP[k]=!EXP[k];render();return}
   var b=e.target.closest&&e.target.closest('button[data-iadd]');if(!b||RO)return;
   var kd=b.dataset.iadd,pay={status:'Researching',for:(VIEW==='all'?'shared':VIEW),cost:null,paidBy:'',share:null,notes:''},id;
   if(kd==='stays')id=add('stays',Object.assign({location:'',checkIn:b.dataset.date||'',checkOut:'',name:''},pay));
-  else if(kd==='travel')id=add('travel',Object.assign({date:b.dataset.date||'',from:b.dataset.from||'',to:b.dataset.to||'',type:'Train',provider:''},pay));
+  else if(kd==='travel')id=add('travel',Object.assign({date:b.dataset.date||'',from:b.dataset.from||'',to:b.dataset.to||'',type:'Train',provider:''},pay,(b.dataset.lf&&S.stays[b.dataset.lf]&&S.stays[b.dataset.lt])?legAuto(S.stays[b.dataset.lf],S.stays[b.dataset.lt]):{}));
   else id=add('other',Object.assign({date:b.dataset.date||'',item:'',location:b.dataset.loc||'',category:'Experience / tour',provider:''},pay));
   if(!id)return;EXP[kd+'/'+id]=true;render();
   var f=document.getElementById(kd+'-'+id+'-'+(kd==='stays'?'location':kd==='travel'?'from':'item'));if(f)f.focus();
 });
-document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&e.target.classList.contains('irow')){e.preventDefault();var k=e.target.dataset.exp;EXP[k]=!EXP[k];render()}});
+document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&e.target.classList.contains('irow')){e.preventDefault();if(e.target.dataset.autoleg){e.target.click();return}var k=e.target.dataset.exp;EXP[k]=!EXP[k];render()}});
 function vSetup(){
   var c=cfg(),n=nightsOf(c.start,c.end);
   return '<section class="card"><div class="cardhead"><div><h2>Travelling parties</h2></div></div><div class="formgrid"><label>First party<input class="in" id="meta-settings-p1" data-c="meta" data-i="settings" data-f="p1" data-t="text" value="'+esc(c.p1)+'" autocomplete="off"></label><label>Second party<input class="in" id="meta-settings-p2" data-c="meta" data-i="settings" data-f="p2" data-t="text" value="'+esc(c.p2)+'" autocomplete="off"></label></div></section>'+
@@ -752,6 +785,7 @@ function render(){
     (!ready&&timedOut?'<div class="notice">Can’t reach the saved data yet. What you see may be out of date.</div>':'')+VIEWS[cv]();
   v.innerHTML=html;
   if(RO)lock();
+  scheduleSync();
   setSync();
   if(fid){var el=document.getElementById(fid);if(el){el.focus({preventScroll:true});try{if(ss!=null)el.setSelectionRange(ss,se)}catch(e){}}}
 }
