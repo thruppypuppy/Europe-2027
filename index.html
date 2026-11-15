@@ -119,6 +119,23 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .cnote{border-top:1px solid var(--line);margin-top:auto}
 .cnote textarea{display:block;width:100%;border:0;background:var(--bg);color:var(--ink);font:inherit;font-size:13px;padding:7px 9px;min-height:66px;resize:vertical}
 .cnote textarea:focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--surface)}
+.calbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:4px 16px 10px}
+.calbar .lbl{font-weight:700;font-size:13px;color:var(--muted)}
+.chipck{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer}
+.chipck input{width:16px;height:16px;accent-color:var(--blue)}
+.btn.sm{padding:3px 9px;font-size:12px}
+.planbtns{display:flex;gap:8px;flex-wrap:wrap}
+.planlist{display:flex;flex-direction:column;gap:6px;padding:6px 16px 8px}
+.prow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.prow.moved{border-color:var(--blue);background:var(--blue-soft)}
+.pdot{width:12px;height:12px;border-radius:50%;flex:none}
+.pd{color:var(--muted);font-size:13px;flex:1;min-width:160px}.pd i{font-style:normal;color:var(--blue)}
+.pbtn{display:flex;gap:6px}
+.pj{padding:4px 16px 14px;font-weight:500}
+.cday.dragme{cursor:grab}.cday.dragging{opacity:.45}.cday.dropt{outline:3px solid var(--blue);outline-offset:-3px}
+.co{padding:6px 9px;font-size:12px;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere;border-top:1px solid var(--line)}
+.co.ok{background:var(--good-bg);color:var(--good)}.co.todo{background:var(--warn-bg);color:var(--warn)}
+.okmsg{background:var(--good-bg);color:var(--good)}
 @media (max-width:900px){
   .weekhead{display:none}
   .week{grid-template-columns:minmax(0,1fr)}
@@ -262,7 +279,8 @@ function calc(){
   var c=cfg();T.balance=(T.paid1-T.fair1)+(+c.settleP1||0)-(+c.settleP2||0);
   return T;
 }
-function stayOn(d){var m=null;arr(S.stays).filter(vis).sort(byDate('checkIn')).forEach(function(s){if(s.checkIn&&s.checkOut&&s.checkIn<=d&&s.checkOut>d)m=s});return m}
+var STAYS_OVR=null;
+function stayOn(d){var m=null;(STAYS_OVR||arr(S.stays)).filter(vis).sort(byDate('checkIn')).forEach(function(s){if(s.checkIn&&s.checkOut&&s.checkIn<=d&&s.checkOut>d)m=s});return m}
 function issues(){
   var c=cfg(),out=[];
   if(!c.start||!c.end||c.end<c.start)return out;
@@ -321,19 +339,75 @@ function vSummary(){
     '<tr><td>Share of what is still to pay</td><td class="n">'+mny(m.yet1)+'</td><td class="n">'+mny(m.yet2)+'</td></tr></tbody></table></div></section>'+
   '<section class="card"><div class="cardhead"><div><h2>By type</h2></div></div><div class="tbl-wrap"><table class="plain"><thead><tr><th>Type</th><th class="n">Cost</th><th class="n">Paid</th><th class="n">Yet to pay</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td>Total</td><td class="n">'+money(m.cost,2)+'</td><td class="n">'+money(m.paid,2)+'</td><td class="n">'+money(m.yet,2)+'</td></tr></tfoot></table></div></section>';
 }
+var LAY={places:1,stays:1,travel:1,other:1,notes:1};
+try{var _l=JSON.parse(localStorage.getItem('tripLayers')||'null');if(_l)Object.keys(LAY).forEach(function(k){if(k in _l)LAY[k]=_l[k]?1:0})}catch(e){}
+var PLAN={on:false,order:[],nights:{},gaps:[],first:'',base:{},moveJ:true};
+function planStart(){
+  var list=arr(S.stays).filter(vis).filter(function(s){return s.checkIn&&s.checkOut&&s.checkOut>s.checkIn}).sort(byDate('checkIn'));
+  PLAN.order=list.map(function(s){return s.id});PLAN.nights={};PLAN.base={};PLAN.gaps=[];PLAN.first=list.length?list[0].checkIn:'';
+  list.forEach(function(s,i){PLAN.nights[s.id]=nightsOf(s.checkIn,s.checkOut);PLAN.base[s.id]={checkIn:s.checkIn,checkOut:s.checkOut,location:s.location};PLAN.gaps.push(i?nightsOf(list[i-1].checkOut,s.checkIn):0)});
+  PLAN.on=true;PLAN.msg='';
+}
+function planDraft(){
+  var out={},prev=null;
+  PLAN.order.forEach(function(id,i){
+    var ci=i===0?PLAN.first:addDays(prev,PLAN.gaps[i]);var co=addDays(ci,PLAN.nights[id]);
+    out[id]={checkIn:ci,checkOut:co};prev=co;
+  });
+  return out;
+}
+function planChanged(dr){return PLAN.order.some(function(id){return dr[id].checkIn!==PLAN.base[id].checkIn||dr[id].checkOut!==PLAN.base[id].checkOut})}
+function planMove(id,to){var i=PLAN.order.indexOf(id);if(i<0||to<0||to>=PLAN.order.length||to===i)return;PLAN.order.splice(i,1);PLAN.order.splice(to,0,id)}
+function planCommit(){
+  var dr=planDraft(),moved=0,jm=0;
+  var trv=arr(S.travel).slice();
+  var jpatch={};
+  if(PLAN.moveJ)trv.forEach(function(t){
+    if(!t.date)return;
+    for(var k=0;k<PLAN.order.length;k++){var id=PLAN.order[k],b=PLAN.base[id],d=dr[id];
+      if(t.date===b.checkIn&&norm(t.to)===norm(b.location)&&d.checkIn!==b.checkIn){jpatch[t.id]={date:d.checkIn};return}
+      if(t.date===b.checkOut&&norm(t.from)===norm(b.location)&&d.checkOut!==b.checkOut){jpatch[t.id]={date:d.checkOut};return}
+    }
+  });
+  PLAN.order.forEach(function(id){var d=dr[id];if(d.checkIn!==PLAN.base[id].checkIn||d.checkOut!==PLAN.base[id].checkOut){var pt={checkIn:d.checkIn,checkOut:d.checkOut};applyLocal('stays',id,pt);save('stays',id,pt);moved++}});
+  Object.keys(jpatch).forEach(function(id){applyLocal('travel',id,jpatch[id]);save('travel',id,jpatch[id]);jm++});
+  PLAN.on=false;PLAN.msgAt=Date.now();PLAN.msg=moved?('Dates set: '+moved+' stay'+(moved>1?'s':'')+' updated'+(jm?' and '+jm+' journey'+(jm>1?'s':'')+' moved':'')+' in the Trip plan.'):'';
+  render();
+}
 function vCalendar(){
   var c=cfg();
   if(!c.start||!c.end||c.end<c.start)return '<div class="card empty">Set the trip start and end dates on the Setup tab.</div>';
-  var stays=arr(S.stays).filter(vis).sort(byDate('checkIn')),tr=arr(S.travel).filter(vis).sort(byDate('date'));
+  var P=PLAN.on,dr=P?planDraft():null;
+  STAYS_OVR=null;
+  if(P){STAYS_OVR=arr(S.stays).filter(vis).map(function(s){return dr[s.id]?Object.assign({},s,dr[s.id]):s})}
+  try{return vCalendarInner(c,P,dr)}finally{STAYS_OVR=null}
+}
+function chip(k,l){return '<label class="chipck"><input type="checkbox" data-lay="'+k+'"'+(LAY[k]?' checked':'')+'> '+l+'</label>'}
+function vCalendarInner(c,P,dr){
+  var stays=arr(S.stays).filter(vis).sort(byDate('checkIn')),tr=arr(S.travel).filter(vis).sort(byDate('date')),oth=arr(S.other).filter(vis);
   var col={},order=[];
   stays.forEach(function(s){var k=norm(s.location);if(k&&!(k in col)){col[k]=PAL[order.length%PAL.length];order.push(s.location)}});
   var iss=issues();
   var box=iss.length?iss.map(function(t){return '<li>'+esc(t)+' <a href="#plan">Fix in Trip plan</a></li>'}).join(''):'<li class="ok">No gaps or mismatches between your stays and journeys.</li>';
-  var h='<section class="card"><div class="cardhead"><div><h2>Things to check</h2><p>Compares your stays with your journeys.</p></div></div><ul class="issues">'+box+'</ul></section>';
-  h+='<section class="card"><div class="cardhead"><div><h2>Trip calendar</h2><p>Dates, stays, travel and status come from the Trip plan tab. Type your own notes in the boxes.</p></div></div>'+
+  var h='';
+  if(PLAN.msg&&Date.now()-PLAN.msgAt<10000)h+='<div class="notice okmsg">'+esc(PLAN.msg)+'</div>';
+  if(P){
+    var ch=planChanged(dr);
+    h+='<section class="card plan"><div class="cardhead"><div><h2>Plan mode</h2><p>Drag a place on the calendar onto another place to move it there, or use the arrows. Nothing changes in the Trip plan until you press Set dates.</p></div><div class="planbtns"><button class="btn primary" data-plan="commit"'+(ch&&!RO?'':' disabled')+'>Set dates</button><button class="btn" data-plan="reset"'+(ch?'':' disabled')+'>Reset</button><button class="btn" data-plan="off">Cancel</button></div></div>'+
+      '<div class="planlist">'+(PLAN.order.length?PLAN.order.map(function(id,i){
+        var s=S.stays[id]||{},d=dr[id],b=PLAN.base[id],mv=(d.checkIn!==b.checkIn||d.checkOut!==b.checkOut);
+        return '<div class="prow'+(mv?' moved':'')+'"><span class="pdot" style="background:'+(col[norm(s.location)]||'var(--slate)')+'"></span><b>'+esc(s.location||'Unnamed')+'</b><span class="pd">'+dfmt(d.checkIn,{day:'numeric',month:'short'})+' → '+dfmt(d.checkOut,{day:'numeric',month:'short'})+' · '+PLAN.nights[id]+' night'+(PLAN.nights[id]>1?'s':'')+(mv?' <i>(was '+dfmt(b.checkIn,{day:'numeric',month:'short'})+')</i>':'')+'</span>'+
+          '<span class="pbtn"><button class="btn sm" data-plan="up" data-id="'+id+'" aria-label="Move earlier"'+(i?'':' disabled')+'>▲</button><button class="btn sm" data-plan="down" data-id="'+id+'" aria-label="Move later"'+(i<PLAN.order.length-1?'':' disabled')+'>▼</button><button class="btn sm" data-plan="nm" data-id="'+id+'" aria-label="One night fewer"'+(PLAN.nights[id]>1?'':' disabled')+'>− night</button><button class="btn sm" data-plan="np" data-id="'+id+'" aria-label="One night more">+ night</button></span></div>'
+      }).join(''):'<div class="empty" style="padding:10px 16px">No stays with check-in and check-out dates yet. Add them in the Trip plan tab first.</div>')+'</div>'+
+      '<label class="chipck pj"><input type="checkbox" data-plan="movej"'+(PLAN.moveJ?' checked':'')+'> Also move journeys that arrive on a check-in day or leave on a check-out day</label></section>';
+  }
+  h+='<section class="card"><div class="cardhead"><div><h2>Things to check</h2><p>'+(P?'Updates as you plan, using the new dates.':'Compares your stays with your journeys.')+'</p></div></div><ul class="issues">'+box+'</ul></section>';
+  h+='<section class="card"><div class="cardhead"><div><h2>Trip calendar</h2><p>'+(P?'Showing places only while planning.':'Dates, stays, travel and status come from the Trip plan tab. Type your own notes in the boxes.')+'</p></div>'+(P?'':'<button class="btn" data-plan="on"'+(RO?' disabled':'')+'>Plan mode</button>')+'</div>'+
+    (P?'':'<div class="calbar"><span class="lbl">Show</span>'+chip('places','Places')+chip('stays','Stays')+chip('travel','Journeys')+chip('other','Other bookings')+chip('notes','Notes')+'<button class="btn sm" data-lay-only="places">Places only</button><button class="btn sm" data-lay-only="all">Show all</button></div>')+
     '<div class="legend">'+order.map(function(l){return '<span class="lg" style="background:'+col[norm(l)]+'">'+esc(l)+'</span>'}).join('')+
-    '<span class="lg ok">✔ Booked or paid</span><span class="lg todo">○ Not booked yet</span><span class="lg bad">No stay recorded</span><span class="lg cx">✖ Cancelled</span></div>'+
+    (P?'':'<span class="lg ok">✔ Booked or paid</span><span class="lg todo">○ Not booked yet</span>')+'<span class="lg bad">No stay recorded</span>'+(P?'':'<span class="lg cx">✖ Cancelled</span>')+'</div>'+
     '<div class="weekhead">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(d){return '<div>'+d+'</div>'}).join('')+'</div><div class="weeks">';
+  var L=P?{places:1,stays:0,travel:0,other:0,notes:0}:LAY;
   var d=addDays(c.start,-wdMon(c.start)),guard=0;
   while(d<=c.end&&guard++<12){
     h+='<div class="week">';
@@ -347,15 +421,41 @@ function vCalendar(){
       var js=tr.filter(function(t){return t.date===d}),trv='';
       if(js.length){var t=js[0],mt=mark(t.status);
         trv='<div class="ct '+mt[0]+'"><b>'+esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')+(t.provider?' ('+t.provider+')':''))+'</b><span>'+mt[1]+tagOf(t)+'</span>'+(js.length>1?'<span class="muted">+ '+(js.length-1)+' more journey'+(js.length>2?'s':'')+' today</span>':'')+'</div>'}
+      var os=oth.filter(function(o){return o.date===d}).map(function(o){var mo=mark(o.status);return '<div class="co '+mo[0]+'"><b>'+esc(o.item||'Booking')+(o.provider?' ('+esc(o.provider)+')':'')+'</b><span>'+mo[1]+tagOf(o)+'</span></div>'}).join('');
       var rec=S.days[d]||{};
-      h+='<article class="cday" id="day-'+d+'"><div class="ch" style="background:'+bg+'">'+lab+'</div><div class="cl" style="background:'+bg+'">'+esc(loc)+'</div>'+
-        (stay||'<div class="cs"></div>')+(trv||'<div class="ct"></div>')+
-        '<div class="cnote"><textarea id="days-'+d+'-notes" data-c="days" data-i="'+d+'" data-f="notes" data-t="text" rows="3" placeholder="Notes" aria-label="Notes for '+lab+'">'+esc(rec.notes)+'</textarea></div></article>';
+      var drag=(P&&st&&!RO)?' draggable="true" data-sid="'+st.id+'"':'';
+      h+='<article class="cday'+(P&&st?' dragme':'')+'" id="day-'+d+'" data-day="'+d+'"'+drag+'><div class="ch" style="background:'+bg+'">'+lab+'</div>'+(L.places?'<div class="cl" style="background:'+bg+'">'+esc(loc)+'</div>':'')+
+        (L.stays?(stay||'<div class="cs"></div>'):'')+(L.travel?(trv||'<div class="ct"></div>'):'')+(L.other?os:'')+
+        (L.notes?'<div class="cnote"><textarea id="days-'+d+'-notes" data-c="days" data-i="'+d+'" data-f="notes" data-t="text" rows="3" placeholder="Notes" aria-label="Notes for '+lab+'">'+esc(rec.notes)+'</textarea></div>':'')+'</article>';
     }
     h+='</div>';
   }
   return h+'</div></section>';
 }
+document.addEventListener('change',function(e){
+  var t=e.target;if(!t||!t.dataset)return;
+  if(t.dataset.lay){LAY[t.dataset.lay]=t.checked?1:0;try{localStorage.setItem('tripLayers',JSON.stringify(LAY))}catch(x){}render()}
+  else if(t.dataset.plan==='movej'){PLAN.moveJ=t.checked}
+});
+document.addEventListener('click',function(e){
+  var b=e.target.closest&&e.target.closest('button');if(!b)return;
+  if(b.dataset.layOnly){var o=b.dataset.layOnly;Object.keys(LAY).forEach(function(k){LAY[k]=(o==='all'||k===o)?1:0});try{localStorage.setItem('tripLayers',JSON.stringify(LAY))}catch(x){}render();return}
+  var a=b.dataset.plan;if(!a||b.disabled)return;
+  var id=b.dataset.id;
+  if(a==='on'){if(RO)return;planStart();render()}
+  else if(a==='off'){PLAN.on=false;render()}
+  else if(a==='reset'){planStart();render()}
+  else if(a==='commit'){if(!RO)planCommit()}
+  else if(a==='up'){planMove(id,PLAN.order.indexOf(id)-1);render()}
+  else if(a==='down'){planMove(id,PLAN.order.indexOf(id)+1);render()}
+  else if(a==='nm'){if(PLAN.nights[id]>1)PLAN.nights[id]--;render()}
+  else if(a==='np'){PLAN.nights[id]++;render()}
+});
+var dragSid=null;
+document.addEventListener('dragstart',function(e){var d=e.target.closest&&e.target.closest('.cday[data-sid]');if(!d||!PLAN.on)return;dragSid=d.dataset.sid;try{e.dataTransfer.setData('text/plain',dragSid);e.dataTransfer.effectAllowed='move'}catch(x){}d.classList.add('dragging')});
+document.addEventListener('dragend',function(){dragSid=null;document.querySelectorAll('.dragging,.dropt').forEach(function(x){x.classList.remove('dragging','dropt')})});
+document.addEventListener('dragover',function(e){var d=e.target.closest&&e.target.closest('.cday[data-sid]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();document.querySelectorAll('.dropt').forEach(function(x){x.classList.remove('dropt')});if(d.dataset.sid!==dragSid)d.classList.add('dropt')});
+document.addEventListener('drop',function(e){var d=e.target.closest&&e.target.closest('.cday[data-sid]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();var to=PLAN.order.indexOf(d.dataset.sid),from=dragSid;dragSid=null;if(to>=0&&d.dataset.sid!==from){planMove(from,to);render()}});
 function vPlan(){
   var c=cfg();
   var sRows=arr(S.stays).filter(vis).sort(byDate('checkIn')).map(function(s){
