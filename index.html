@@ -202,6 +202,17 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .leg.slim{height:16px;padding:0}.leg.slim .lbl{display:none}.homerow{padding:4px 2px 6px}.homerow label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted);max-width:280px}
 .phead.tap{cursor:pointer;outline:none}.phead.tap:hover,.phead.tap:focus-visible{filter:brightness(1.07)}.ptail{display:flex;align-items:center;gap:8px;flex:none}.pedit{font-size:12px;font-weight:700;background:rgba(255,255,255,.22);padding:3px 10px;border-radius:99px}.pbox>.iedit{background:var(--surface)}
 .half.fly{background:var(--slate);color:#fff;justify-content:center;padding:12px 8px 3px}.half.fly>b{font-size:12px}
+.cday{display:flex;flex-direction:column}
+.cmid{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin}
+.cmid>.half{flex:1 1 auto}.cmid>.half.full{flex:1 1 auto}
+.cx2{flex:none}.cnote{flex:none}
+@media (min-width:701px){
+.ct2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.half{min-height:30px}.blk{min-height:30px}
+.cday{aspect-ratio:1/1;overflow:hidden}
+.cnote textarea{height:30px!important;min-height:30px!important;resize:none!important}
+.ct2{font-size:10.5px;padding:3px 8px}
+}
 
 /* standalone page basics */
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -533,7 +544,7 @@ function vCalendarInner(c,P){
       var bd='';
       if(L.leave&&inTrip&&wdMon(d)<5){var fv=freeOn(c,d);bd=fv>=1?'<span class="bd fr">Free</span>':(fv>0?'<span class="bd fr">Free ½</span><span class="bd lvl">Leave ½</span>':'<span class="bd lvl">Leave</span>')}
       var rec=S.days[d]||{};
-      h+='<article class="cday'+(inTrip?'':' offtrip')+'" id="day-'+d+'" data-day="'+d+'"><div class="ch"><span>'+lab+'</span>'+bd+'</div>'+body+(ex?'<div class="cx2">'+ex+'</div>':'')+
+      h+='<article class="cday'+(inTrip?'':' offtrip')+'" id="day-'+d+'" data-day="'+d+'"><div class="ch"><span>'+lab+'</span>'+bd+'</div><div class="cmid">'+body+(ex?'<div class="cx2">'+ex+'</div>':'')+'</div>'+
         (L.notes?'<div class="cnote"><textarea id="days-'+d+'-notes" data-c="days" data-i="'+d+'" data-f="notes" data-t="text" rows="2" placeholder="Notes" aria-label="Notes for '+lab+'">'+esc(rec.notes)+'</textarea></div>':'')+'</article>';
     }
     h+='</div>';
@@ -823,6 +834,7 @@ function render(){
   else html=(noDb?'<div class="notice">Saving is not available in this view, so nothing you enter will be kept. Open the page from your Claude account to use it.</div>':'')+
     (!ready&&timedOut?'<div class="notice">Can’t reach the saved data yet. What you see may be out of date.</div>':'')+VIEWS[cv]();
   v.innerHTML=html;
+  v.querySelectorAll('.ct2').forEach(function(e){e.title=e.textContent});
   if(RO)lock();
   scheduleSync();
   setSync();
