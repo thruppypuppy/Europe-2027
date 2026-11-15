@@ -199,6 +199,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .addb{margin:4px 0 2px;border-style:dashed}
 .itinfoot{margin:14px 0 24px;text-align:center}
 .legnote{margin:10px 14px 0;padding:8px 12px;border-radius:10px;background:var(--blue-soft);font-size:12.5px;line-height:1.45}.legnote .btn{margin-left:6px}.item.auto{border-style:dashed}
+.leg.slim{height:16px;padding:0}.leg.slim .lbl{display:none}.homerow{padding:4px 2px 6px}.homerow label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted);max-width:280px}
 
 /* standalone page basics */
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -227,7 +228,7 @@ var STATUS=['Researching','Considering','Booked','Paid','Cancelled'];
 var TYPES=['Flight','Train','Car hire','Bus','Ferry','Taxi','Other'];
 var CATS=['Experience / tour','Food & dining','Tickets / entry','Travel insurance','Visa / documents','eSIM / data','Other'];
 var PAL=['#2F5D8A','#C8553D','#2E8B7A','#8A6BB0','#D08C2B','#4E8F4A','#B2456E','#5B6C7D','#7C5E3C','#3F8FB5'];
-var DEF={p1:'Thrupps',p2:'Ameer-Begs',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
+var DEF={p1:'Thrupps',p2:'Ameer-Begs',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,home:'Sydney',free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
 var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Itinerary'],['setup','Setup']];
 var S={stays:{},travel:{},other:{},days:{},payments:{},settings:null};
 var db=null,RO=false,noDb=false,timedOut=false,needRender=false,pendingEdits=0,inflight=0,writeFail=false;
@@ -522,6 +523,7 @@ function vCalendarInner(c,P){
       }
       var js=tr.filter(function(t){return t.date===d}),ex='';
       if(L.travel)js.forEach(function(t){var mt=mark(t.status);ex+='<div class="ct2 '+mt[0]+'"><b>'+esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')+(t.provider?' ('+t.provider+')':''))+'</b> '+mt[1]+'</div>'});
+      if(L.travel)tr.filter(function(t){return t.arriveDate&&t.arriveDate!==t.date&&t.arriveDate===d}).forEach(function(t){ex+='<div class="ct2 ok"><b>Arrive: '+esc((t.from||'?')+' → '+(t.to||'?'))+'</b></div>'});
       if(L.other)oth.filter(function(x){return x.date===d}).forEach(function(x){var mo=mark(x.status);ex+='<div class="ct2 '+mo[0]+'"><b>'+esc(x.item||'Booking')+(x.provider?' ('+esc(x.provider)+')':'')+'</b> '+mo[1]+'</div>'});
       var bd='';
       if(L.leave&&inTrip&&wdMon(d)<5){var fv=freeOn(c,d);bd=fv>=1?'<span class="bd fr">Free</span>':(fv>0?'<span class="bd fr">Free ½</span><span class="bd lvl">Leave ½</span>':'<span class="bd lvl">Leave</span>')}
@@ -568,6 +570,7 @@ document.addEventListener('dragend',function(){dragSid=null;document.querySelect
 document.addEventListener('dragover',function(e){var d=e.target.closest&&e.target.closest('.cday[data-day]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();document.querySelectorAll('.dropt').forEach(function(x){x.classList.remove('dropt')});d.classList.add('dropt')});
 document.addEventListener('drop',function(e){var d=e.target.closest&&e.target.closest('.cday[data-day]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();var n=nightsOf(dragFrom,d.dataset.day),id=dragSid;dragSid=null;if(n){planShift(id,n);render()}});
 function legAuto(A,B){return {from:A.location||'',to:B.location||'',date:A.checkOut||B.checkIn||'',legFrom:A.id,legTo:B.id,sig:[A.id,A.location,A.checkOut,B.id,B.location,B.checkIn].join('|')}}
+function flightAuto(kind,st,home){return {from:kind==='out'?home:(st.location||''),to:kind==='out'?(st.location||''):home,sig:kind+'|'+st.id+'|'+st.location+'|'+home}}
 var syncT=null;
 function scheduleSync(){if(syncT)return;syncT=setTimeout(function(){syncT=null;syncLegs()},60)}
 function syncLegs(){
@@ -583,9 +586,22 @@ function syncLegs(){
     }else if(t.from&&t.to){var bd=1e9,bp=null;
       list.forEach(function(a){if(norm(a.from)===norm(t.from)&&norm(a.to)===norm(t.to)){var d=Math.abs(+nightsOf(t.date||a.date,a.date)||0);if(d<bd){bd=d;bp=a}}});
       if(bp)pt={legFrom:bp.legFrom,legTo:bp.legTo,sig:bp.sig};
+      else if(st.length){var cc=cfg(),hn=norm(cc.home||'Sydney'),f0=st[0],l0=st[st.length-1];
+        if(!t.leg&&norm(t.from)===hn&&norm(t.to)===norm(f0.location)){var o1=flightAuto('out',f0,cc.home||'Sydney');pt={leg:'out',sig:o1.sig}}
+        else if(!t.leg&&norm(t.from)===norm(l0.location)&&norm(t.to)===hn){var o2=flightAuto('home',l0,cc.home||'Sydney');pt={leg:'home',sig:o2.sig};if(!t.arriveDate&&cc.end>t.date)pt.arriveDate=cc.end}
+      }
     }
     if(pt){applyLocal('travel',t.id,pt);save('travel',t.id,pt);n++}
   });
+  if(st.length){
+    var c0=cfg(),home=c0.home||'Sydney',first=st[0],last=st[st.length-1];
+    var outs=arr(S.travel).filter(function(t){return t.leg==='out'}).sort(byDate('date')),homes=arr(S.travel).filter(function(t){return t.leg==='home'}).sort(byDate('date'));
+    var ao=flightAuto('out',first,home),ah=flightAuto('home',last,home);
+    outs.forEach(function(t,i){if(t.sig!==ao.sig){var pt={sig:ao.sig};if(i===0)pt.from=ao.from;if(i===outs.length-1)pt.to=ao.to;applyLocal('travel',t.id,pt);save('travel',t.id,pt);n++}});
+    homes.forEach(function(t,i){if(t.sig!==ah.sig){var pt={sig:ah.sig};if(i===0)pt.from=ah.from;if(i===homes.length-1)pt.to=ah.to;applyLocal('travel',t.id,pt);save('travel',t.id,pt);n++}});
+    var fs=outs.length?outs[0].date:'',lh=homes.length?homes[homes.length-1]:null,fe=lh?(lh.arriveDate||lh.date||''):'',sg=fs+'|'+fe;
+    if((fs||fe)&&c0.flightSig!==sg){var mp={flightSig:sg};if(fs)mp.start=fs;if(fe)mp.end=fe;applyLocal('meta','settings',mp);save('meta','settings',mp);n++}
+  }
   if(n)render();
 }
 var EXP={};
@@ -601,19 +617,29 @@ function payFields(coll,it,c){
 function editor(coll,it,c){
   var i=it.id,f='';
   if(coll==='stays')f=lab('Place',fld(coll,i,'location',it.location))+lab('Arrive (from 12pm)',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Leave (by 12pm)',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Stay name',fld(coll,i,'name',it.name));
-  else if(coll==='travel')f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('From',fld(coll,i,'from',it.from))+lab('To',fld(coll,i,'to',it.to))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
+  else if(coll==='travel')f=lab(it.leg?'Leaves':'Date',fld(coll,i,'date',it.date,'date'))+lab('Arrives (if a different day)',fld(coll,i,'arriveDate',it.arriveDate,'date'))+lab('From',fld(coll,i,'from',it.from))+lab('To',fld(coll,i,'to',it.to))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
   else f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('What',fld(coll,i,'item',it.item))+lab('Place',fld(coll,i,'location',it.location))+lab('Category',sel(coll,i,'category',it.category,CATS))+lab('Provider',fld(coll,i,'provider',it.provider));
   var note='';
   if(coll==='travel'&&it.legFrom&&S.stays[it.legFrom]&&S.stays[it.legTo])note='<div class="legnote">Linked to <b>'+esc((S.stays[it.legFrom].location||'?')+' → '+(S.stays[it.legTo].location||'?'))+'</b>. From, To and Date follow those two cards and reset whenever either card changes. You can overwrite them here. <button class="btn sm" data-relink="'+esc(i)+'">Match the cards now</button></div>';
+  if(coll==='travel'&&it.leg)note='<div class="legnote">'+(it.leg==='out'?'This flight sets the start of your trip from its leaving date.':'This flight sets the end of your trip from its arrival date (or leaving date if no arrival date is set).')+' From and To follow your home city and the '+(it.leg==='out'?'first':'last')+' place card, and reset when that card changes. For flights with stops, add each flight separately.</div>';
   return '<div class="iedit">'+note+'<div class="formgrid">'+f+payFields(coll,it,c)+lab('Notes, booking ref or link',fld(coll,i,'notes',it.notes),'wide')+'</div><div class="iact">'+delBtn(coll,i)+'<button class="btn sm" data-exp="'+coll+'/'+esc(i)+'">Done</button></div></div>';
 }
 function irow(coll,it,icon,title,sub,c){
   var key=coll+'/'+esc(it.id),open=!!EXP[coll+'/'+it.id],mk=mark(it.status),cost=+it.cost||0;
   return '<div class="item'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">'+icon+'</span><div class="it"><b>'+title+tagOf(it)+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div><span class="chipst '+mk[0]+'">'+mk[1]+'</span>'+(cost?'<span class="cost">'+money(cost)+'</span>':'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open?editor(coll,it,c):'')+'</div>';
 }
-function jrow(t,c){return irow('travel',t,ICON[t.type]||'🧭',esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')),esc(dayf(t.date)+(t.provider?' · '+t.provider:'')),c)}
+function jrow(t,c){return irow('travel',t,ICON[t.type]||'🧭',esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')),esc(dayf(t.date)+(t.arriveDate&&t.arriveDate!==t.date?' → '+dayf(t.arriveDate):'')+(t.provider?' · '+t.provider:'')),c)}
 function arow(o,c){return irow('other',o,'🎟️',esc(o.item||'New activity'),esc(dayf(o.date)+(o.category?' · '+o.category:'')+(o.provider?' · '+o.provider:'')),c)}
 function addb(kind,label,at){var a='';Object.keys(at||{}).forEach(function(k){a+=' data-'+k+'="'+esc(at[k])+'"'});return '<button class="btn sm addb" data-iadd="'+kind+'"'+a+(RO?' disabled':'')+'>+ '+label+'</button>'}
+function flightsCard(kind,list,st,c){
+  var home=c.home||'Sydney',srt=list.slice().sort(byDate('date')),tot=0;srt.forEach(function(t){tot+=(+t.cost||0)});
+  var last=srt.length?srt[srt.length-1]:null,sub;
+  if(!srt.length)sub=kind==='out'?'Add your flights to Europe':'Add your flights home';
+  else sub=(kind==='out'?'Leaves ':'Leaves ')+dayf(srt[0].date)+(last&&(last.arriveDate||last.date)?(kind==='out'?' · arrives ':' · home ')+dayf(last.arriveDate||last.date):'');
+  var ttl=kind==='out'?'Flying to Europe':'Flying home';
+  return '<div class="pbox fbox"><div class="phead" style="background:var(--slate)"><div><h3>✈️ '+ttl+'</h3><small>'+esc(kind==='out'?home+' → '+(st.location||'?'):(st.location||'?')+' → '+home)+' · '+esc(sub)+'</small></div>'+(tot?'<span class="ptot">'+money(tot)+'</span>':'')+'</div>'+
+    '<div class="sect">'+(kind==='out'?'<div class="homerow"><label>Home city / airport'+fld('meta','settings','home',home,'text')+'</label></div>':'')+srt.map(function(t){return jrow(t,c)}).join('')+addb('travel','Add flight',{leg:kind,sid:st.id,date:kind==='out'?(c.start||''):(st.checkOut||'')})+'</div></div>';
+}
 function vPlan(){
   var c=cfg();
   var stays=arr(S.stays).filter(vis).sort(byDate('checkIn')),trv=arr(S.travel).filter(vis).sort(byDate('date')),oth=arr(S.other).filter(vis).sort(byDate('date'));
@@ -623,7 +649,10 @@ function vPlan(){
   var dist=function(a,b){var x=nightsOf(a,b);return x===''?99999:Math.abs(x)};
   var best=function(loc,date,key){var bi=-1,bd=1e9;if(!norm(loc))return -1;stays.forEach(function(s,i){if(norm(s.location)===norm(loc)){var d=dist(date,s[key]);if(d<bd){bd=d;bi=i}}});return bi};
   var sidx=function(id){for(var q=0;q<stays.length;q++)if(stays[q].id===id)return q;return -1};
+  var outsL=[],homesL=[];
   trv.forEach(function(t){
+    if(t.leg==='out'){outsL.push(t);return}
+    if(t.leg==='home'){homesL.push(t);return}
     if(t.legFrom&&t.legTo){var ia=sidx(t.legFrom),ib=sidx(t.legTo);if(ia>=0&&ib===ia+1){legs[ia].push(t);return}}
     var fi=best(t.from,t.date,'checkOut'),ti=best(t.to,t.date,'checkIn');
     if(fi>=0&&ti===fi+1)legs[fi].push(t);else if(ti>=0)arrive[ti].push(t);else if(fi>=0)depart[fi].push(t);else stray.push(t)});
@@ -634,16 +663,18 @@ function vPlan(){
     if(i>=0)acts[i].push(o);else loose.push(o)});
   var h='<p class="how">Tap any item to open it and fill in the details: dates, status, cost, who paid, notes. Places follow your stays in date order, with the journeys between them. Costs are in AUD. Set Status to Paid once an item is fully paid, then choose who paid. The share is the dollar amount of that cost the '+esc(c.p1)+' are responsible for; leave it blank for 50/50.</p><div class="itin">';
   if(!n)h+='<div class="card empty" style="padding:18px">No places yet. Add your first stay to start the itinerary.</div>';
+  if(n)h+=flightsCard('out',outsL,stays[0],c)+'<div class="leg slim"></div>';
   stays.forEach(function(s,i){
     var bg=col[norm(s.location)]||'var(--slate)',nn=nightsOf(s.checkIn,s.checkOut),tot=(+s.cost||0);acts[i].forEach(function(o){tot+=(+o.cost||0)});
     h+='<div class="pbox"><div class="phead" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+'</small></div>'+(tot?'<span class="ptot">'+money(tot)+'</span>':'')+'</div>';
-    if(arrive[i].length||i===0)h+='<div class="sect"><div class="lbl">Getting here</div>'+arrive[i].map(function(t){return jrow(t,c)}).join('')+(i===0?addb('travel','Add journey',{to:s.location||'',date:s.checkIn||''}):'')+'</div>';
+    if(arrive[i].length)h+='<div class="sect"><div class="lbl">Getting here</div>'+arrive[i].map(function(t){return jrow(t,c)}).join('')+'</div>';
     h+='<div class="sect"><div class="lbl">Stay · arrive from 12pm, leave by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'Stay (no name yet)'),esc('Arrive '+dayf(s.checkIn)+' · leave '+dayf(s.checkOut)),c)+'</div>';
     h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
-    if(depart[i].length||i===n-1)h+='<div class="sect"><div class="lbl">Heading on</div>'+depart[i].map(function(t){return jrow(t,c)}).join('')+(i===n-1?addb('travel','Add journey',{from:s.location||'',date:s.checkOut||''}):'')+'</div>';
+    if(depart[i].length)h+='<div class="sect"><div class="lbl">Heading on</div>'+depart[i].map(function(t){return jrow(t,c)}).join('')+'</div>';
     h+='</div>';
     if(i<n-1){var nx=stays[i+1];var au=legAuto(s,nx);h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+(legs[i].length?legs[i].map(function(t){return jrow(t,c)}).join(''):'<div class="item auto"><div class="irow" data-autoleg="'+esc(s.id+'|'+nx.id)+'" tabindex="0" role="button"><span class="ic">🧭</span><div class="it"><b>'+esc((au.from||'?')+' → '+(au.to||'?'))+'</b><small>'+esc(dayf(au.date))+' · filled in from the two cards · tap to add train, flight, cost…</small></div><span class="chipst todo">Add details</span><span class="chev">▸</span></div></div>')+(legs[i].length?addb('travel','Add another journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||'',lf:s.id,lt:nx.id}):'')+'</div>'}
   });
+  if(n){var lastS=stays[n-1];for(var q=n-1;q>=0;q--)if(stays[q].checkOut){lastS=stays[q];break}h+='<div class="leg slim"></div>'+flightsCard('home',homesL,lastS,c)}
   h+='</div><div class="itinfoot">'+addb('stays','Add a place',{})+'</div>';
   if(stray.length)h+='<section class="card"><div class="cardhead"><div><h2>Journeys not linked to a place</h2><p>Their From and To do not match any stay.</p></div></div><div class="sect">'+stray.map(function(t){return jrow(t,c)}).join('')+'</div></section>';
   if(loose.length)h+='<section class="card"><div class="cardhead"><div><h2>Other bookings not linked to a place</h2><p>Set the place or a date that falls in a stay and they will move into its box.</p></div></div><div class="sect">'+loose.map(function(o){return arow(o,c)}).join('')+addb('other','Add booking',{})+'</div></section>';
@@ -660,7 +691,8 @@ document.addEventListener('click',function(e){
   if(el){var k=el.dataset.exp;EXP[k]=!EXP[k];render();return}
   var b=e.target.closest&&e.target.closest('button[data-iadd]');if(!b||RO)return;
   var kd=b.dataset.iadd,pay={status:'Researching',for:(VIEW==='all'?'shared':VIEW),cost:null,paidBy:'',share:null,notes:''},id;
-  if(kd==='stays')id=add('stays',Object.assign({location:'',checkIn:b.dataset.date||'',checkOut:'',name:''},pay));
+  if(b.dataset.leg&&S.stays[b.dataset.sid])id=add('travel',Object.assign({date:b.dataset.date||'',type:'Flight',provider:'',arriveDate:'',leg:b.dataset.leg},pay,flightAuto(b.dataset.leg,S.stays[b.dataset.sid],cfg().home||'Sydney')));
+  else if(kd==='stays')id=add('stays',Object.assign({location:'',checkIn:b.dataset.date||'',checkOut:'',name:''},pay));
   else if(kd==='travel')id=add('travel',Object.assign({date:b.dataset.date||'',from:b.dataset.from||'',to:b.dataset.to||'',type:'Train',provider:''},pay,(b.dataset.lf&&S.stays[b.dataset.lf]&&S.stays[b.dataset.lt])?legAuto(S.stays[b.dataset.lf],S.stays[b.dataset.lt]):{}));
   else id=add('other',Object.assign({date:b.dataset.date||'',item:'',location:b.dataset.loc||'',category:'Experience / tour',provider:''},pay));
   if(!id)return;EXP[kd+'/'+id]=true;render();
