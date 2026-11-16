@@ -201,6 +201,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .cost{font-weight:700;font-size:13px;white-space:nowrap}.chev{color:var(--muted);flex:none}
 .iedit{border-top:1px solid var(--line);padding:2px 0 12px}
 .iedit .formgrid{padding:10px 14px 4px}.iedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}.iedit label.wide{grid-column:1/-1}
+.attbox{grid-column:1/-1;border-top:1px dashed var(--line,#ddd);padding-top:8px}.attbox h4{margin:0 0 6px;font-size:13px}.attrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}.attrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attrow small{color:#888}.attmsg{font-size:12px;color:#888;margin-top:4px}.attin{display:none}
 .iact{display:flex;justify-content:space-between;align-items:center;padding:6px 14px 0}
 .leg{width:calc(100% - 72px);margin:0 auto;padding:8px 16px 10px;background:var(--blue-soft);border-left:1px solid var(--line);border-right:1px solid var(--line);position:relative}
 .leg::before{content:"";position:absolute;left:-1px;top:0;bottom:0;border-left:3px dashed var(--blue)}
@@ -269,14 +270,14 @@ body{margin:0}
 'use strict';
 var $=function(s){return document.querySelector(s)};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
-var COLLS=['stays','travel','other','days','payments'],NEED=COLLS.length+1;
+var COLLS=['stays','travel','other','days','payments','attachments'],NEED=COLLS.length+1;
 var STATUS=['Researching','Considering','Booked','Paid','Cancelled'];
 var TYPES=['Flight','Train','Car hire','Bus','Ferry','Taxi','Other'];
 var CATS=['Experience / tour','Food & dining','Tickets / entry','Travel insurance','Visa / documents','eSIM / data','Other'];
 var PAL=['#2F5D8A','#C8553D','#2E8B7A','#8A6BB0','#D08C2B','#4E8F4A','#B2456E','#5B6C7D','#7C5E3C','#3F8FB5'];
 var DEF={p1:'Thrupps',p2:'Ameer-Begs',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,home:'Sydney',free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
 var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Itinerary'],['setup','Setup']];
-var S={stays:{},travel:{},other:{},days:{},payments:{},settings:null};
+var S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},settings:null};
 var db=null,RO=false,noDb=false,timedOut=false,needRender=false,pendingEdits=0,inflight=0,writeFail=false;
 var AUTH='loading',AUTHMSG='',AUTHEMAIL='',PENDING_LINK=false,IMPORT=null,IMPORTERR='',USERMAIL='',auth=null,fs=null,unsubs=[];
 var BASE='trips/main';
@@ -345,8 +346,54 @@ function add(c,data){
   enqueue(k,function(){return ref.set(doc).then(function(){confirmed[k]=1})});
   render();return id;
 }
+function attsOf(k){return arr(S.attachments).filter(function(a){return a.item===k}).sort(function(a,b){return (a.created||0)-(b.created||0)})}
+function delAtt(id){
+  var a=S.attachments[id];if(!a)return;var n=a.chunks||0;delete S.attachments[id];
+  for(var j=0;j<n;j++)(function(j){db.doc('filechunks/'+id+'_'+j).delete().catch(function(){})})(j);
+  db.doc('attachments/'+id).delete().catch(function(){});
+}
+var ATTMSG={};
+function attMsg(k,m){ATTMSG[k]=m;var e=document.querySelector('[data-attmsg="'+k+'"]');if(e)e.textContent=m||''}
+function fmtSize(n){return n>1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB'}
+function shrinkImg(file){return new Promise(function(res){
+  if(!/^image\/(jpeg|png|webp|heic)/.test(file.type)){res(file);return}
+  var u=URL.createObjectURL(file),im=new Image();
+  im.onload=function(){var r=Math.min(1,1600/Math.max(im.width,im.height)),cv=document.createElement('canvas');cv.width=Math.round(im.width*r);cv.height=Math.round(im.height*r);cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);URL.revokeObjectURL(u);
+    cv.toBlob(function(b){if(!b||b.size>=file.size){res(file);return}b.name=file.name.replace(/\.\w+$/,'')+'.jpg';res(b)},'image/jpeg',0.8)};
+  im.onerror=function(){URL.revokeObjectURL(u);res(file)};im.src=u})}
+function blobB64(b){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){var d=String(r.result);res(d.slice(d.indexOf(',')+1))};r.onerror=rej;r.readAsDataURL(b)})}
+function uploadAtt(key,file){
+  if(!db||RO)return;
+  if(file.size>25*1048576){attMsg(key,'That file is too big to even try. Limit is about 5 MB.');return}
+  attMsg(key,'Preparing '+file.name+'…');
+  shrinkImg(file).then(function(f){
+    if(f.size>5*1048576){attMsg(key,'Too big: '+fmtSize(f.size)+'. Limit is about 5 MB. Shrink or split it first.');return}
+    var name=f.name||file.name,ref=db.collection('attachments').doc(),id=ref.id;
+    return blobB64(f).then(function(b64){
+      var CH=600000,n=Math.ceil(b64.length/CH)||1,j=0;
+      function next(){
+        if(j>=n)return ref.set({item:key,name:name,type:f.type||file.type||'application/octet-stream',size:f.size,chunks:n,created:Date.now()});
+        var part=b64.slice(j*CH,(j+1)*CH),idx=j;attMsg(key,'Uploading '+name+' ('+(j+1)+'/'+n+')…');
+        return db.doc('filechunks/'+id+'_'+idx).set({att:id,i:idx,d:part}).then(function(){j++;return next()});
+      }
+      return next();
+    }).then(function(){attMsg(key,'');},function(e){console.error(e);attMsg(key,'Upload failed. Check your connection and try again.');
+      for(var j=0;j<20;j++)db.doc('filechunks/'+id+'_'+j).delete().catch(function(){})});
+  });
+}
+function openAtt(id){
+  var a=S.attachments[id];if(!a)return;var w=window.open('','_blank');
+  var ps=[];for(var j=0;j<a.chunks;j++)ps.push(db.doc('filechunks/'+id+'_'+j).get());
+  Promise.all(ps).then(function(ds){
+    var bin=ds.map(function(d){return d.data().d}).join(''),raw=atob(bin),u8=new Uint8Array(raw.length);
+    for(var i=0;i<raw.length;i++)u8[i]=raw.charCodeAt(i);
+    var url=URL.createObjectURL(new Blob([u8],{type:a.type}));
+    if(w)w.location=url;else window.location=url;
+  }).catch(function(e){console.error(e);if(w)w.close();alert('Could not load that file.')});
+}
 function remove(c,i){
   var k=c+'/'+i;delete S[c][i];
+  attsOf(k).forEach(function(a){delAtt(a.id)});
   enqueue(k,function(){return db.doc(k).delete().then(function(){delete confirmed[k]})});
   render();
 }
@@ -681,11 +728,13 @@ function editor(coll,it,c){
   var note='';
   if(coll==='travel'&&it.legFrom&&S.stays[it.legFrom]&&S.stays[it.legTo])note='<div class="legnote">Linked to <b>'+esc((S.stays[it.legFrom].location||'?')+' → '+(S.stays[it.legTo].location||'?'))+'</b>. From, To and Date follow those two cards and reset whenever either card changes. You can overwrite them here. <button class="btn sm" data-relink="'+esc(i)+'">Match the cards now</button></div>';
   if(coll==='travel'&&it.leg)note='<div class="legnote">'+(it.leg==='out'?'This flight sets the start of your trip from its leaving date.':'This flight sets the end of your trip from its arrival date (or leaving date if no arrival date is set).')+' From and To follow your home city and the '+(it.leg==='out'?'first':'last')+' place card, and reset when that card changes. For flights with stops, add each flight separately.</div>';
-  return '<div class="iedit">'+note+'<div class="formgrid">'+f+payFields(coll,it,c)+lab('Notes, booking ref or link',fld(coll,i,'notes',it.notes),'wide')+'</div><div class="iact">'+delBtn(coll,i)+'<button class="btn sm" data-exp="'+coll+'/'+esc(i)+'">Done</button></div></div>';
+  var ak=coll+'/'+i,al=attsOf(ak).map(function(a){return '<div class="attrow"><span>'+(/^image\//.test(a.type)?'🖼️':/pdf/.test(a.type)?'📄':'📎')+'</span><span class="nm">'+esc(a.name)+' <small>'+fmtSize(a.size||0)+'</small></span><button class="btn sm" data-attopen="'+esc(a.id)+'">Open</button>'+(RO?'':'<button class="del" data-attdel="'+esc(a.id)+'" title="Remove">✕</button>')+'</div>'}).join('');
+  var att='<div class="attbox"><h4>Attachments</h4>'+(al||'<div class="attmsg">No files yet.</div>')+(RO?'':'<button class="btn sm" data-attadd="'+esc(ak)+'">+ Add file</button><input class="attin" type="file" data-attin="'+esc(ak)+'">')+'<div class="attmsg" data-attmsg="'+esc(ak)+'">'+esc(ATTMSG[ak]||'')+'</div></div>';
+  return '<div class="iedit">'+note+'<div class="formgrid">'+f+payFields(coll,it,c)+lab('Notes, booking ref or link',fld(coll,i,'notes',it.notes),'wide')+att+'</div><div class="iact">'+delBtn(coll,i)+'<button class="btn sm" data-exp="'+coll+'/'+esc(i)+'">Done</button></div></div>';
 }
 function irow(coll,it,icon,title,sub,c,noEd){
   var key=coll+'/'+esc(it.id),open=!!EXP[coll+'/'+it.id],mk=mark(it.status),cost=+it.cost||0;
-  return '<div class="item'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">'+icon+'</span><div class="it"><b>'+title+tagOf(it)+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div><span class="chipst '+mk[0]+'">'+mk[1]+'</span>'+(cost?'<span class="cost">'+money(cost)+'</span>':'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open&&!noEd?editor(coll,it,c):'')+'</div>';
+  return '<div class="item'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">'+icon+'</span><div class="it"><b>'+title+tagOf(it)+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div><span class="chipst '+mk[0]+'">'+mk[1]+'</span>'+(attsOf(coll+'/'+it.id).length?'<span class="cost" title="Attachments">📎'+attsOf(coll+'/'+it.id).length+'</span>':'')+(cost?'<span class="cost">'+money(cost)+'</span>':'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open&&!noEd?editor(coll,it,c):'')+'</div>';
 }
 function jrow(t,c){return irow('travel',t,ICON[t.type]||'🧭',esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')),esc(dayf(t.date)+(t.arriveDate&&t.arriveDate!==t.date?' → '+dayf(t.arriveDate):'')+(t.provider?' · '+t.provider:'')),c)}
 function arow(o,c){return irow('other',o,'🎟️',esc(o.item||'New activity'),esc(dayf(o.date)+(o.category?' · '+o.category:'')+(o.provider?' · '+o.provider:'')),c)}
@@ -865,7 +914,7 @@ function renderHead(){
   $('#sub').textContent=(c.start&&c.end)?dfmt(c.start,{day:'numeric',month:'short'})+' – '+dfmt(c.end,{day:'numeric',month:'short',year:'numeric'})+(n!==''?' · '+n+' nights':'')+' · '+c.p1+' & '+c.p2:'';
   var vs=$('#viewas');if(vs)vs.innerHTML=[['all','Everyone'],['1',c.p1+' + shared'],['2',c.p2+' + shared']].map(function(o){return '<option value="'+o[0]+'"'+(o[0]===VIEW?' selected':'')+'>'+esc(o[1])+'</option>'}).join('');
 }
-function lock(){document.querySelectorAll('#view input,#view select,#view textarea,#view button[data-add],#view button[data-iadd],#view button[data-del]').forEach(function(e){e.disabled=true})}
+function lock(){document.querySelectorAll('#view input,#view select,#view textarea,#view button[data-add],#view button[data-iadd],#view button[data-del],#view button[data-attadd],#view button[data-attdel]').forEach(function(e){e.disabled=true})}
 function render(){
   var _pe=document.querySelector('.fpanel'),_pst=_pe?_pe.scrollTop:0;
   var ae0=document.activeElement;
@@ -905,6 +954,7 @@ document.addEventListener('input',function(e){if(e.target.closest&&e.target.clos
 document.addEventListener('change',function(e){if(e.target.closest&&e.target.closest('#view')){onField(e.target);if(e.target.tagName==='SELECT'||e.target.type==='date'||(e.target.dataset&&e.target.dataset.c==='meta'&&e.target.dataset.f!=='settleP1'&&e.target.dataset.f!=='settleP2'))render()}});
 document.addEventListener('click',function(e){
   var b=e.target.closest&&e.target.closest('button');if(!b)return;
+  if(b.dataset.attopen){openAtt(b.dataset.attopen);return}
   if(b.dataset.act){doAct(b.dataset.act);return}
   if(RO)return;
   if(b.dataset.add){var c=b.dataset.add,id,pay={status:'Researching',for:(VIEW==='all'?'shared':VIEW),cost:null,paidBy:'',share:null,notes:''};
@@ -912,12 +962,16 @@ document.addEventListener('click',function(e){
     else if(c==='travel')id=add(c,Object.assign({date:'',from:'',to:'',type:'Train',provider:''},pay));
     else if(c==='other')id=add(c,Object.assign({date:'',item:'',location:'',category:'Experience / tour',provider:''},pay));
     var f=document.getElementById(c+'-'+id+'-'+(c==='stays'?'location':c==='travel'?'date':'item'));if(f)f.focus();
+  }else if(b.dataset.attadd){var inp=b.parentNode.querySelector('.attin');if(inp)inp.click();
+  }else if(b.dataset.attdel){
+    if(b.classList.contains('armed')){delAtt(b.dataset.attdel);render()}
+    else{b.classList.add('armed');b.textContent='Delete?';setTimeout(function(){if(b.isConnected){b.classList.remove('armed');b.textContent='✕'}},3000)}
   }else if(b.dataset.del){
     if(b.classList.contains('armed')){var p=b.dataset.del.split('/');remove(p[0],p.slice(1).join('/'))}
     else{b.classList.add('armed');b.textContent='Delete?';setTimeout(function(){if(b.isConnected){b.classList.remove('armed');b.textContent='✕'}},3000)}
   }
 });
-document.addEventListener('change',function(e){if(e.target&&e.target.id==='viewas'){VIEW=e.target.value;try{localStorage.setItem('tripView',VIEW)}catch(x){}render()}});
+document.addEventListener('change',function(e){var t=e.target;if(t&&t.dataset&&t.dataset.attin&&t.files&&t.files[0]){uploadAtt(t.dataset.attin,t.files[0]);t.value='';return}if(e.target&&e.target.id==='viewas'){VIEW=e.target.value;try{localStorage.setItem('tripView',VIEW)}catch(x){}render()}});
 document.addEventListener('focusout',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='date'&&t.closest&&t.closest('#view'))setTimeout(render,0)},true);
 document.addEventListener('change',function(e){if(e.target&&e.target.id==='importFile')readImport(e.target)});
 document.addEventListener('input',function(e){if(e.target&&e.target.id==='authEmail')AUTHEMAIL=e.target.value});
@@ -928,7 +982,7 @@ window.addEventListener('hashchange',function(){window.scrollTo(0,0);render()});
 function markLoaded(k){loadedSet[k]=1;setSync()}
 function teardown(){
   unsubs.forEach(function(u){try{u()}catch(e){}});unsubs=[];
-  loadedSet={};confirmed={};timedOut=false;S={stays:{},travel:{},other:{},days:{},payments:{},settings:null};
+  loadedSet={};confirmed={};timedOut=false;S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},settings:null};
 }
 function subErr(err){
   console.error(err);
