@@ -436,14 +436,17 @@ function chipHtml(t,s1,n,pp){
 function itChip(it){var n=cntOf(it);return chipHtml(costOf(it),shareOf(it),n,it.per==='pp'?money(+it.cost||0)+' each × '+n:'')}
 var BUDNAMES=['Food','Metro / local transport','Taxis and rideshare','Groceries','Spending money','Other'];
 function calc(){
-  var its=allItems(),T={cost:0,paid:0,yet:0,paid1:0,paid2:0,fair1:0,yet1:0,missing:0,n:0,done:0,types:{}};
-  ['Accommodation','Flights','Trains','Car hire','Other transport','Other bookings','Daily budget'].forEach(function(k){T.types[k]={cost:0,paid:0}});
+  var its=allItems(),T={c1:0,c2:0,pd1:0,pd2:0,cost:0,paid:0,yet:0,paid1:0,paid2:0,fair1:0,yet1:0,missing:0,n:0,done:0,types:{}};
+  ['Accommodation','Flights','Trains','Car hire','Other transport','Other bookings','Daily budget'].forEach(function(k){T.types[k]={cost:0,paid:0,c1:0,c2:0,pd1:0,pd2:0}});
   its.forEach(function(it){
     var canc=it.status==='Cancelled',cost=costOf(it),isPaid=it.status==='Paid';
-    if(it.status==='Booked'||isPaid)T.done++;
+    var sh1=Math.min(cost,shareOf(it)),sh2=cost-sh1,vs=vis(it);
+    if(vs&&(it.status==='Booked'||isPaid))T.done++;
     if(canc)return;
-    if(it.label)T.n++;
+    if(vs&&it.label)T.n++;
     T.cost+=cost;T.types[it.bucket].cost+=cost;
+    T.c1+=sh1;T.c2+=sh2;T.types[it.bucket].c1+=sh1;T.types[it.bucket].c2+=sh2;
+    if(isPaid){T.pd1+=sh1;T.pd2+=sh2;T.types[it.bucket].pd1+=sh1;T.types[it.bucket].pd2+=sh2}
     if(isPaid){
       T.paid+=cost;T.types[it.bucket].paid+=cost;
       if(String(it.paidBy)==='1'){T.paid1+=cost;T.fair1+=shareOf(it)}
@@ -451,7 +454,7 @@ function calc(){
       else T.missing++;
     }else T.yet1+=shareOf(it);
   });
-  arr(S.budget).forEach(function(b){var t=budTotal(b);T.cost+=t;T.types['Daily budget'].cost+=t;T.yet1+=t*p1frac(b)});
+  arr(S.budget).forEach(function(b){var t=budTotal(b);T.cost+=t;T.types['Daily budget'].cost+=t;T.yet1+=t*p1frac(b);var d1=t*p1frac(b);T.c1+=d1;T.c2+=t-d1;T.types['Daily budget'].c1+=d1;T.types['Daily budget'].c2+=t-d1});
   T.yet=T.cost-T.paid;T.fair2=T.paid1+T.paid2-T.fair1;T.yet2=T.yet-T.yet1;
   var c=cfg();T.s1=+c.settleP1||0;T.s2=+c.settleP2||0;arr(S.payments).forEach(function(p){var a=+p.amount||0;if(p.from==='1')T.s1+=a;else if(p.from==='2')T.s2+=a});T.balance=(T.paid1-T.fair1)+T.s1-T.s2;
   return T;
@@ -503,17 +506,20 @@ function mark(st){
 
 /* ---------- views ---------- */
 function vSummary(){
-  var m=calc(),c=cfg(),pct=m.cost>0?Math.min(100,m.paid/m.cost*100):0,sq=Math.abs(m.balance)<0.5;
+  var m=calc(),c=cfg(),pv=VIEW==='1'||VIEW==='2';
+  if(pv){var K=VIEW;m.view={cost:m['c'+K],paid:m['pd'+K],types:{}};m.view.yet=m.view.cost-m.view.paid;Object.keys(m.types).forEach(function(k){var x=m.types[k];m.view.types[k]={cost:x['c'+K],paid:x['pd'+K]}})}
+  var V=pv?m.view:{cost:m.cost,paid:m.paid,yet:m.yet,types:m.types};
+  var pct=V.cost>0?Math.min(100,V.paid/V.cost*100):0,sq=Math.abs(m.balance)<0.5;
   var verdict=sq?'All square. Nobody owes anything right now.':(m.balance>0?esc(c.p2)+' owe '+esc(c.p1)+' '+money(m.balance,2):esc(c.p1)+' owe '+esc(c.p2)+' '+money(-m.balance,2));
-  var keys=Object.keys(m.types),maxc=Math.max.apply(null,keys.map(function(k){return m.types[k].cost}).concat([1]));
-  var rows=keys.map(function(k){var x=m.types[k];return '<tr><td class="c">'+esc(k)+'<span class="catbar" style="width:'+(x.cost/maxc*100)+'%"></span></td><td class="n c">'+mny(x.cost)+'</td><td class="n c">'+mny(x.paid)+'</td><td class="n c">'+mny(x.cost-x.paid)+'</td></tr>'}).join('');
+  var keys=Object.keys(m.types),maxc=Math.max.apply(null,keys.map(function(k){return V.types[k].cost}).concat([1]));
+  var rows=keys.map(function(k){var x=V.types[k];return '<tr><td class="c">'+esc(k)+'<span class="catbar" style="width:'+(x.cost/maxc*100)+'%"></span></td><td class="n c">'+mny(x.cost)+'</td><td class="n c">'+mny(x.paid)+'</td><td class="n c">'+mny(x.cost-x.paid)+'</td></tr>'}).join('');
   var warn=m.missing?'<div class="notice">'+m.missing+' item'+(m.missing>1?'s are':' is')+' marked Paid without a Paid by, so '+(m.missing>1?'they are':'it is')+' left out of the split. Fix it on the Itinerary tab.</div>':'';
-  return (isEmpty()?'<div class="notice">Nothing here yet. Open Setup to import your starter data, or add rows on the Itinerary tab.</div>':'')+(VIEW!=='all'?'<div class="notice">The Summary always shows the whole trip, not just your view.</div>':'')+warn+'<section class="tiles">'+tile('Total cost',money(m.cost))+tile('Paid so far',money(m.paid),'<div class="bar"><i style="width:'+pct+'%"></i></div>')+tile('Yet to pay',money(m.yet))+tile('Booked or paid',m.done+' of '+m.n)+'</section>'+
+  return (isEmpty()?'<div class="notice">Nothing here yet. Open Setup to import your starter data, or add rows on the Itinerary tab.</div>':'')+(pv?'<div class="notice">Totals below are '+esc(PARTY(VIEW))+' only: your share of every item. Who owes who and settle-up still cover the whole trip.</div>':'')+warn+'<section class="tiles">'+tile(pv?'Your total cost':'Total cost',money(V.cost))+tile(pv?'Your share paid':'Paid so far',money(V.paid),'<div class="bar"><i style="width:'+pct+'%"></i></div>')+tile('Yet to pay',money(V.yet))+tile('Booked or paid',m.done+' of '+m.n)+'</section>'+
   '<section class="card"><div class="cardhead"><div><h2>Who owes who</h2><p>Based on items marked Paid, using the share amounts on the Itinerary tab.</p></div></div>'+
     '<div class="verdict '+(sq?'sq':'owe')+'">'+verdict+'</div><div class="tbl-wrap"><table class="plain"><thead><tr><th></th><th class="n">'+esc(c.p1)+'</th><th class="n">'+esc(c.p2)+'</th></tr></thead><tbody>'+
     '<tr><td>Settle-up payments made to the other party<br><span class="hint">Add each one in the box below.</span></td><td class="n">'+mny(m.s1)+'</td><td class="n">'+mny(m.s2)+'</td></tr>'+
     '</tbody></table></div></section>'+payCard(m,c)+
-  '<section class="card"><div class="cardhead"><div><h2>By type</h2></div></div><div class="tbl-wrap"><table class="plain"><thead><tr><th>Type</th><th class="n">Cost</th><th class="n">Paid</th><th class="n">Yet to pay</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td>Total</td><td class="n">'+money(m.cost,2)+'</td><td class="n">'+money(m.paid,2)+'</td><td class="n">'+money(m.yet,2)+'</td></tr></tfoot></table></div></section>';
+  '<section class="card"><div class="cardhead"><div><h2>By type</h2></div></div><div class="tbl-wrap"><table class="plain"><thead><tr><th>Type</th><th class="n">Cost</th><th class="n">Paid</th><th class="n">Yet to pay</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td>Total</td><td class="n">'+money(V.cost,2)+'</td><td class="n">'+money(V.paid,2)+'</td><td class="n">'+money(V.yet,2)+'</td></tr></tfoot></table></div></section>';
 }
 var PAY={open:false,from:'1',amount:'',date:'',what:'',err:''};
 var todayIso=function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
