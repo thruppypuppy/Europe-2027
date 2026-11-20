@@ -413,6 +413,7 @@ function allItems(){
   arr(S.general).forEach(function(x){x.kind='general';x.label=x.item;x.bucket='General expenses';out.push(x)});
   return out;
 }
+var paidOf=function(it){if(it.status==='Cancelled')return 0;var c=costOf(it);if(it.status==='Paid')return c;return Math.max(0,Math.min(c,+it.deposit||0))};
 var TIDS=['1a','1b','2a','2b'];
 var tname=function(t){var c=cfg(),n=c['n'+t];return n||(PARTY(t.charAt(0))+' '+(t.charAt(1)==='a'?'1':'2'))};
 var whoOf=function(it){var w=it.who;if(typeof w==='string'&&w){var a=w.split(',').filter(function(x){return TIDS.indexOf(x)>=0});if(a.length)return a}var f=forOf(it);return f==='1'?['1a','1b']:(f==='2'?['2a','2b']:TIDS.slice())};
@@ -436,7 +437,7 @@ function chipHtml(t,s1,n,pp){
   if(!t)return '';var a=viewAmt(t,s1),l;
   if(VIEW==='all')l=pp||(n===4?'for all 4':'for '+n+' '+(n===1?'person':'people'));else l='your share';
   return '<span class="cost">'+money(a)+'<small>'+esc(l)+'</small></span>'}
-function itChip(it){var n=cntOf(it);return chipHtml(costOf(it),shareOf(it),n,it.per==='pp'?money(+it.cost||0)+' each × '+n:'')}
+function itChip(it){var n=cntOf(it),pa=paidOf(it),part=it.status!=='Paid'&&pa>0,l=it.per==='pp'?money(+it.cost||0)+' each × '+n:'';return chipHtml(costOf(it),shareOf(it),n,part?(l||(n===4?'for all 4':'for '+n+' '+(n===1?'person':'people')))+' · '+money(pa)+' paid':l)}
 var BUDNAMES=['Food','Metro / local transport','Taxis and rideshare','Groceries','Spending money','Other'];
 function calc(){
   var its=allItems(),T={c1:0,c2:0,pd1:0,pd2:0,cost:0,paid:0,yet:0,paid1:0,paid2:0,fair1:0,yet1:0,missing:0,n:0,done:0,types:{}};
@@ -449,13 +450,14 @@ function calc(){
     if(vs&&it.label)T.n++;
     T.cost+=cost;T.types[it.bucket].cost+=cost;
     T.c1+=sh1;T.c2+=sh2;T.types[it.bucket].c1+=sh1;T.types[it.bucket].c2+=sh2;
-    if(isPaid){T.pd1+=sh1;T.pd2+=sh2;T.types[it.bucket].pd1+=sh1;T.types[it.bucket].pd2+=sh2}
-    if(isPaid){
-      T.paid+=cost;T.types[it.bucket].paid+=cost;
-      if(String(it.paidBy)==='1'){T.paid1+=cost;T.fair1+=shareOf(it)}
-      else if(String(it.paidBy)==='2'){T.paid2+=cost;T.fair1+=shareOf(it)}
+    var pa=paidOf(it),f=cost>0?pa/cost:0;
+    if(pa>0){T.pd1+=sh1*f;T.pd2+=sh2*f;T.types[it.bucket].pd1+=sh1*f;T.types[it.bucket].pd2+=sh2*f;
+      T.paid+=pa;T.types[it.bucket].paid+=pa;
+      if(String(it.paidBy)==='1'){T.paid1+=pa;T.fair1+=shareOf(it)*f}
+      else if(String(it.paidBy)==='2'){T.paid2+=pa;T.fair1+=shareOf(it)*f}
       else T.missing++;
-    }else T.yet1+=shareOf(it);
+    }
+    T.yet1+=shareOf(it)*(1-f);
   });
   arr(S.budget).forEach(function(b){var t=budTotal(b);T.cost+=t;T.types['Daily budget'].cost+=t;T.yet1+=t*p1frac(b);var d1=t*p1frac(b);T.c1+=d1;T.c2+=t-d1;T.types['Daily budget'].c1+=d1;T.types['Daily budget'].c2+=t-d1});
   T.yet=T.cost-T.paid;T.fair2=T.paid1+T.paid2-T.fair1;T.yet2=T.yet-T.yet1;
@@ -494,7 +496,7 @@ var tile=function(l,v,extra){return '<div class="tile"><small>'+l+'</small><b>'+
 var delBtn=function(c,i){return '<button class="del" data-del="'+c+'/'+esc(i)+'" title="Delete this row" aria-label="Delete row">✕</button>'};
 var addBtn=function(c,l){return '<button class="btn" data-add="'+c+'">+ '+l+'</button>'};
 function payCols(c,it,cfgv){
-  var needs=(it.status==='Paid'&&!it.paidBy)?'needs':'';
+  var needs=(paidOf(it)>0&&!it.paidBy)?'needs':'';
   return '<td>'+sel(c,it.id,'for',forOf(it),[['shared','Shared'],['1',cfgv.p1+' only'],['2',cfgv.p2+' only']])+'</td><td>'+sel(c,it.id,'status',it.status,STATUS,'st-'+it.status)+'</td>'+
     '<td style="min-width:104px">'+fld(c,it.id,'cost',it.cost,'num','0.00')+'</td>'+
     '<td>'+sel(c,it.id,'paidBy',it.paidBy||'',[['',''],['1',cfgv.p1],['2',cfgv.p2]],needs)+'</td>'+
@@ -516,7 +518,7 @@ function vSummary(){
   var verdict=sq?'All square. Nobody owes anything right now.':(m.balance>0?esc(c.p2)+' owe '+esc(c.p1)+' '+money(m.balance,2):esc(c.p1)+' owe '+esc(c.p2)+' '+money(-m.balance,2));
   var keys=Object.keys(m.types),maxc=Math.max.apply(null,keys.map(function(k){return V.types[k].cost}).concat([1]));
   var rows=keys.map(function(k){var x=V.types[k];return '<tr><td class="c">'+esc(k)+'<span class="catbar" style="width:'+(x.cost/maxc*100)+'%"></span></td><td class="n c">'+mny(x.cost)+'</td><td class="n c">'+mny(x.paid)+'</td><td class="n c">'+mny(x.cost-x.paid)+'</td></tr>'}).join('');
-  var warn=m.missing?'<div class="notice">'+m.missing+' item'+(m.missing>1?'s are':' is')+' marked Paid without a Paid by, so '+(m.missing>1?'they are':'it is')+' left out of the split. Fix it on the Itinerary tab.</div>':'';
+  var warn=m.missing?'<div class="notice">'+m.missing+' item'+(m.missing>1?'s are':' is')+' paid or part paid with no Paid by, so '+(m.missing>1?'they are':'it is')+' left out of the split. Fix it on the Itinerary tab.</div>':'';
   return (isEmpty()?'<div class="notice">Nothing here yet. Open Setup to import your starter data, or add rows on the Itinerary tab.</div>':'')+(pv?'<div class="notice">Totals below are '+esc(PARTY(VIEW))+' only: your share of every item. Who owes who and settle-up still cover the whole trip.</div>':'')+warn+'<section class="tiles">'+tile(pv?'Your total cost':'Total cost',money(V.cost))+tile(pv?'Your share paid':'Paid so far',money(V.paid),'<div class="bar"><i style="width:'+pct+'%"></i></div>')+tile('Yet to pay',money(V.yet))+tile('Booked or paid',m.done+' of '+m.n)+'</section>'+
   '<section class="card"><div class="cardhead"><div><h2>Who owes who</h2><p>Based on items marked Paid, using the share amounts on the Itinerary tab.</p></div></div>'+
     '<div class="verdict '+(sq?'sq':'owe')+'">'+verdict+'</div><div class="tbl-wrap"><table class="plain"><thead><tr><th></th><th class="n">'+esc(c.p1)+'</th><th class="n">'+esc(c.p2)+'</th></tr></thead><tbody>'+
@@ -776,12 +778,13 @@ function whoChips(coll,it){
 }
 function totLine(it){var n=cntOf(it);return it.per==='pp'?'= '+money(costOf(it),2)+' in total for '+n+' '+(n===1?'person':'people'):(n===4?'for everyone':'for '+n+' '+(n===1?'person':'people'))}
 function payFields(coll,it,c){
-  var needs=(it.status==='Paid'&&!it.paidBy)?'needs':'';
+  var needs=(paidOf(it)>0&&!it.paidBy)?'needs':'';
   var dflt=money(costOf(it)*p1frac(it),2);
   return '<label class="wide">Who is this for?'+whoChips(coll,it)+'</label>'+lab('Status',sel(coll,it.id,'status',it.status,STATUS,'st-'+it.status))+
     lab('Price is',sel(coll,it.id,'per',it.per==='pp'?'pp':'total',[['total','The total price'],['pp','Per person']]))+
     lab('Price (AUD)',fld(coll,it.id,'cost',it.cost,'num','0.00'))+lab('Paid by',sel(coll,it.id,'paidBy',it.paidBy||'',[['',''],['1',c.p1],['2',c.p2]],needs))+
-    '<div class="wide totline">'+esc(totLine(it))+'</div>'+
+    lab('Part paid so far (AUD)',fld(coll,it.id,'deposit',it.deposit,'num','e.g. deposit')+'<span class="hint">Leave blank if none. Status Paid means paid in full.</span>')+
+    '<div class="wide totline">'+esc(totLine(it))+(it.status!=='Paid'&&paidOf(it)>0?'. Paid '+money(paidOf(it),2)+', '+money(costOf(it)-paidOf(it),2)+' still to pay':'')+'</div>'+
     lab(esc(c.p1)+' share (AUD)',fld(coll,it.id,'share',it.share,'num','auto: '+dflt));
 }
 function budsOf(sid){return arr(S.budget).filter(function(b){return b.stay===sid&&vis(b)}).sort(function(a,b){return (a.created||0)-(b.created||0)})}
