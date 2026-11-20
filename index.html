@@ -731,7 +731,7 @@ function syncLegs(){
       if(t.sig!==a.sig){
         var af=t.autoFrom!=null?t.autoFrom:t.from,at=t.autoTo!=null?t.autoTo:t.to;
         if(norm(af)!==norm(a.from)||norm(at)!==norm(a.to))ap(t,link(a,true));
-        else ap(t,{from:a.from,to:a.to,date:a.date,sig:a.sig,autoFrom:a.from,autoTo:a.to});
+        else ap(t,{date:a.date,sig:a.sig,autoFrom:a.from,autoTo:a.to});
       }else if(t.autoFrom==null){applyLocal('travel',t.id,{autoFrom:a.from,autoTo:a.to});save('travel',t.id,{autoFrom:a.from,autoTo:a.to})}
       return}
     var bp=byName(t.autoFrom!=null?t.autoFrom:t.from,t.autoTo!=null?t.autoTo:t.to,t.date);
@@ -792,13 +792,14 @@ function brow(b,c){
   var key='budget/'+esc(b.id),open=!!EXP['budget/'+b.id],n=budDays(b);
   return '<div class="item bud'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">💰</span><div class="it"><b>'+esc(b.name||'Daily budget')+tagOf(b)+'</b><small>'+esc(money(+b.rate||0)+(b.per==='total'?' a day, whole group':' per person a day')+' · '+n+' day'+(n===1?'':'s')+(b.per==='total'?'':' · '+cntOf(b)+' people'))+'</small></div>'+chipHtml(budTotal(b),budTotal(b)*p1frac(b),cntOf(b),b.per==='pp'?money(+b.rate||0)+' each a day × '+cntOf(b):'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open?budEditor(b,c):'')+'</div>';
 }
+function placeOpts(c){var seen={},o=[c.home||'Sydney'].concat(arr(S.stays).sort(byDate('checkIn')).map(function(x){return x.location}));return o.filter(function(x){var k=norm(x);if(!k||seen[k])return false;seen[k]=1;return true}).map(function(x){return '<option value="'+esc(x)+'">'}).join('')}
 function editor(coll,it,c){
   var i=it.id,f='';
   if(coll==='stays')f=lab('Place',fld(coll,i,'location',it.location))+lab('Arrive (from 12pm)',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Leave (by 12pm)',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Stay name',fld(coll,i,'name',it.name));
-  else if(coll==='travel')f=lab(it.leg?'Leaves':'Date',fld(coll,i,'date',it.date,'date'))+lab('Arrives (if a different day)',fld(coll,i,'arriveDate',it.arriveDate,'date'))+lab('From',fld(coll,i,'from',it.from))+lab('To',fld(coll,i,'to',it.to))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
+  else if(coll==='travel')f=lab(it.leg?'Leaves':'Date',fld(coll,i,'date',it.date,'date'))+lab('Arrives (if a different day)',fld(coll,i,'arriveDate',it.arriveDate,'date'))+lab('From (type, or pick a place)',fld(coll,i,'from',it.from).replace('<input ','<input list="placelist" '))+lab('To (type, or pick a place)',fld(coll,i,'to',it.to).replace('<input ','<input list="placelist" '))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
   else f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('What',fld(coll,i,'item',it.item))+lab('Place',fld(coll,i,'location',it.location))+lab('Category',sel(coll,i,'category',it.category,CATS))+lab('Provider',fld(coll,i,'provider',it.provider));
   var note='';
-  if(coll==='travel'&&it.legFrom&&S.stays[it.legFrom]&&S.stays[it.legTo])note='<div class="legnote">Linked to <b>'+esc((S.stays[it.legFrom].location||'?')+' → '+(S.stays[it.legTo].location||'?'))+'</b>. From, To and Date follow those two cards and reset whenever either card changes. You can overwrite them here. <button class="btn sm" data-relink="'+esc(i)+'">Match the cards now</button></div>';
+  if(coll==='travel'&&it.legFrom&&S.stays[it.legFrom]&&S.stays[it.legTo])note='<div class="legnote">Linked to <b>'+esc((S.stays[it.legFrom].location||'?')+' → '+(S.stays[it.legTo].location||'?'))+'</b>. From, To and Date follow those two cards and reset whenever either card changes. You can type over From and To yourself (for example an airport or station) and they will stay until a place card changes. <button class="btn sm" data-relink="'+esc(i)+'">Match the cards now</button></div>';
   if(coll==='travel'&&it.leg)note='<div class="legnote">'+(it.leg==='out'?'This flight sets the start of your trip from its leaving date.':'This flight sets the end of your trip from its arrival date (or leaving date if no arrival date is set).')+' From and To follow your home city and the '+(it.leg==='out'?'first':'last')+' place card, and reset when that card changes. For flights with stops, add each flight separately.</div>';
   var ak=coll+'/'+i,al=attsOf(ak).map(function(a){return '<div class="attrow"><span>'+(/^image\//.test(a.type)?'🖼️':/pdf/.test(a.type)?'📄':'📎')+'</span><span class="nm">'+esc(a.name)+' <small>'+fmtSize(a.size||0)+'</small></span><button class="btn sm" data-attopen="'+esc(a.id)+'">Open</button>'+(RO?'':'<button class="del" data-attdel="'+esc(a.id)+'" title="Remove">✕</button>')+'</div>'}).join('');
   var att='<div class="attbox"><h4>Attachments</h4>'+(al||'<div class="attmsg">No files yet.</div>')+(RO?'':'<button class="btn sm" data-attadd="'+esc(ak)+'">+ Add file</button><input class="attin" type="file" data-attin="'+esc(ak)+'">')+'<div class="attmsg" data-attmsg="'+esc(ak)+'">'+esc(ATTMSG[ak]||'')+'</div></div>';
@@ -847,7 +848,7 @@ function vPlan(){
     if(arrive[i].length){if(i>0)legs[i-1]=legs[i-1].concat(arrive[i]);else startX=startX.concat(arrive[i])}
     if(depart[i].length){if(i<n-1)legs[i]=legs[i].concat(depart[i]);else endX=endX.concat(depart[i])}
   });
-  var h='<p class="how">Tap any item to open it and fill in the details: dates, status, cost, who paid, notes. Places follow your stays in date order, with the journeys between them. Costs are in AUD. Set Status to Paid once an item is fully paid, then choose who paid. The share is the dollar amount of that cost the '+esc(c.p1)+' are responsible for; leave it blank for 50/50.</p><div class="itin">';
+  var h='<p class="how">Tap any item to open it and fill in the details: dates, status, cost, who paid, notes. Places follow your stays in date order, with the journeys between them. Costs are in AUD. Set Status to Paid once an item is fully paid, then choose who paid. The share is the dollar amount of that cost the '+esc(c.p1)+' are responsible for; leave it blank for 50/50.</p><div class="itin"><datalist id="placelist">'+placeOpts(c)+'</datalist>';
   if(!n)h+='<div class="card empty" style="padding:18px">No places yet. Add your first stay to start the itinerary.</div>';
   if(n)h+=flightsCard('out',outsL,stays[0],c)+(startX.length?'<div class="leg"><div class="lbl">Travel to '+esc(stays[0].location||'first place')+'</div>'+startX.map(function(t){return jrow(t,c)}).join('')+'</div>':'<div class="leg slim"></div>');
   stays.forEach(function(s,i){
