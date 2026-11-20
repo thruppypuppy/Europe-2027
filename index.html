@@ -201,6 +201,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .cost{font-weight:700;font-size:13px;white-space:nowrap}.chev{color:var(--muted);flex:none}
 .iedit{border-top:1px solid var(--line);padding:2px 0 12px}
 .iedit .formgrid{padding:10px 14px 4px}.iedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}.iedit label.wide{grid-column:1/-1}
+.whochips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.whochip{border:1px solid var(--line,#ccc);background:transparent;color:inherit;border-radius:99px;padding:5px 11px;font-size:13px;cursor:pointer}.whochip.on{background:var(--blue,#2563eb);border-color:var(--blue,#2563eb);color:#fff;font-weight:600}.totline{font-size:13px;color:#888}.bud .irow .ic{font-size:18px}
 .attbox{grid-column:1/-1;border-top:1px dashed var(--line,#ddd);padding-top:8px}.attbox h4{margin:0 0 6px;font-size:13px}.attrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}.attrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attrow small{color:#888}.attmsg{font-size:12px;color:#888;margin-top:4px}.attin{display:none}
 .iact{display:flex;justify-content:space-between;align-items:center;padding:6px 14px 0}
 .leg{width:calc(100% - 72px);margin:0 auto;padding:8px 16px 10px;background:var(--blue-soft);border-left:1px solid var(--line);border-right:1px solid var(--line);position:relative}
@@ -270,14 +271,14 @@ body{margin:0}
 'use strict';
 var $=function(s){return document.querySelector(s)};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
-var COLLS=['stays','travel','other','days','payments','attachments'],NEED=COLLS.length+1;
+var COLLS=['stays','travel','other','days','payments','attachments','budget'],NEED=COLLS.length+1;
 var STATUS=['Researching','Considering','Booked','Paid','Cancelled'];
 var TYPES=['Flight','Train','Car hire','Bus','Ferry','Taxi','Other'];
 var CATS=['Experience / tour','Food & dining','Tickets / entry','Travel insurance','Visa / documents','eSIM / data','Other'];
 var PAL=['#2F5D8A','#C8553D','#2E8B7A','#8A6BB0','#D08C2B','#4E8F4A','#B2456E','#5B6C7D','#7C5E3C','#3F8FB5'];
-var DEF={p1:'Thrupps',p2:'Ameer-Begs',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,home:'Sydney',free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
+var DEF={p1:'Thrupps',p2:'Ameer-Begs',n1a:'',n1b:'',n2a:'',n2b:'',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,home:'Sydney',free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
 var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Itinerary'],['setup','Setup']];
-var S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},settings:null};
+var S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},budget:{},settings:null};
 var db=null,RO=false,noDb=false,timedOut=false,needRender=false,pendingEdits=0,inflight=0,writeFail=false;
 var AUTH='loading',AUTHMSG='',AUTHEMAIL='',PENDING_LINK=false,IMPORT=null,IMPORTERR='',USERMAIL='',auth=null,fs=null,unsubs=[];
 var BASE='trips/main';
@@ -394,6 +395,7 @@ function openAtt(id){
 function remove(c,i){
   var k=c+'/'+i;delete S[c][i];
   attsOf(k).forEach(function(a){delAtt(a.id)});
+  if(c==='stays')arr(S.budget).forEach(function(b){if(b.stay===i)remove('budget',b.id)});
   enqueue(k,function(){return db.doc(k).delete().then(function(){delete confirmed[k]})});
   render();
 }
@@ -406,12 +408,21 @@ function allItems(){
   arr(S.other).forEach(function(x){x.kind='other';x.label=x.item;x.bucket='Other bookings';out.push(x)});
   return out;
 }
-var shareOf=function(it){if(it.share!=null&&it.share!=='')return +it.share||0;var f=forOf(it),cost=+it.cost||0;return f==='1'?cost:(f==='2'?0:cost*0.5)};
+var TIDS=['1a','1b','2a','2b'];
+var tname=function(t){var c=cfg(),n=c['n'+t];return n||(PARTY(t.charAt(0))+' '+(t.charAt(1)==='a'?'1':'2'))};
+var whoOf=function(it){var w=it.who;if(typeof w==='string'&&w){var a=w.split(',').filter(function(x){return TIDS.indexOf(x)>=0});if(a.length)return a}var f=forOf(it);return f==='1'?['1a','1b']:(f==='2'?['2a','2b']:TIDS.slice())};
+var cntOf=function(it){return whoOf(it).length||1};
+var costOf=function(it){return (+it.cost||0)*(it.per==='pp'?cntOf(it):1)};
+var p1frac=function(it){var w=whoOf(it);return w.filter(function(x){return x.charAt(0)==='1'}).length/(w.length||1)};
+var shareOf=function(it){if(it.share!=null&&it.share!=='')return +it.share||0;return costOf(it)*p1frac(it)};
+var budDays=function(b){if(b.days!=null&&b.days!=='')return +b.days||0;var s=S.stays[b.stay],n=s?nightsOf(s.checkIn,s.checkOut):'';return n===''?0:Math.max(0,n)};
+var budTotal=function(b){return (+b.rate||0)*budDays(b)*(b.per==='pp'?cntOf(b):1)};
+var BUDNAMES=['Food','Metro / local transport','Taxis and rideshare','Groceries','Spending money','Other'];
 function calc(){
   var its=allItems(),T={cost:0,paid:0,yet:0,paid1:0,paid2:0,fair1:0,yet1:0,missing:0,n:0,done:0,types:{}};
-  ['Accommodation','Flights','Trains','Car hire','Other transport','Other bookings'].forEach(function(k){T.types[k]={cost:0,paid:0}});
+  ['Accommodation','Flights','Trains','Car hire','Other transport','Other bookings','Daily budget'].forEach(function(k){T.types[k]={cost:0,paid:0}});
   its.forEach(function(it){
-    var canc=it.status==='Cancelled',cost=+it.cost||0,isPaid=it.status==='Paid';
+    var canc=it.status==='Cancelled',cost=costOf(it),isPaid=it.status==='Paid';
     if(it.status==='Booked'||isPaid)T.done++;
     if(canc)return;
     if(it.label)T.n++;
@@ -423,6 +434,7 @@ function calc(){
       else T.missing++;
     }else T.yet1+=shareOf(it);
   });
+  arr(S.budget).forEach(function(b){var t=budTotal(b);T.cost+=t;T.types['Daily budget'].cost+=t;T.yet1+=t*p1frac(b)});
   T.yet=T.cost-T.paid;T.fair2=T.paid1+T.paid2-T.fair1;T.yet2=T.yet-T.yet1;
   var c=cfg();T.s1=+c.settleP1||0;T.s2=+c.settleP2||0;arr(S.payments).forEach(function(p){var a=+p.amount||0;if(p.from==='1')T.s1+=a;else if(p.from==='2')T.s2+=a});T.balance=(T.paid1-T.fair1)+T.s1-T.s2;
   return T;
@@ -714,11 +726,30 @@ var EXP={};
 var ICON={Flight:'✈️',Train:'🚆','Car hire':'🚗',Bus:'🚌',Ferry:'⛴️',Taxi:'🚕',Other:'🧭'};
 var dayf=function(d){return d?dfmt(d,{weekday:'short',day:'numeric',month:'short'}):'no date'};
 function lab(t,inner,cls){return '<label'+(cls?' class="'+cls+'"':'')+'>'+t+inner+'</label>'}
+function whoChips(coll,it){
+  var w=whoOf(it);
+  return '<div class="whochips">'+TIDS.map(function(t){return '<button type="button" class="whochip'+(w.indexOf(t)>=0?' on':'')+'" data-who="'+coll+'/'+esc(it.id)+'/'+t+'" aria-pressed="'+(w.indexOf(t)>=0)+'">'+esc(tname(t))+'</button>'}).join('')+'</div>';
+}
+function totLine(it){var n=cntOf(it);return it.per==='pp'?'= '+money(costOf(it),2)+' in total for '+n+' '+(n===1?'person':'people'):(n===4?'for everyone':'for '+n+' '+(n===1?'person':'people'))}
 function payFields(coll,it,c){
   var needs=(it.status==='Paid'&&!it.paidBy)?'needs':'';
-  return lab('For',sel(coll,it.id,'for',forOf(it),[['shared','Shared'],['1',c.p1+' only'],['2',c.p2+' only']]))+lab('Status',sel(coll,it.id,'status',it.status,STATUS,'st-'+it.status))+
-    lab('Cost (AUD)',fld(coll,it.id,'cost',it.cost,'num','0.00'))+lab('Paid by',sel(coll,it.id,'paidBy',it.paidBy||'',[['',''],['1',c.p1],['2',c.p2]],needs))+
-    lab(esc(c.p1)+' share (AUD)',fld(coll,it.id,'share',it.share,'num',forOf(it)==='1'?'all':(forOf(it)==='2'?'0':'50/50')));
+  var dflt=money(costOf(it)*p1frac(it),2);
+  return '<label class="wide">Who is this for?'+whoChips(coll,it)+'</label>'+lab('Status',sel(coll,it.id,'status',it.status,STATUS,'st-'+it.status))+
+    lab('Price is',sel(coll,it.id,'per',it.per==='pp'?'pp':'total',[['total','The total price'],['pp','Per person']]))+
+    lab('Price (AUD)',fld(coll,it.id,'cost',it.cost,'num','0.00'))+lab('Paid by',sel(coll,it.id,'paidBy',it.paidBy||'',[['',''],['1',c.p1],['2',c.p2]],needs))+
+    '<div class="wide totline">'+esc(totLine(it))+'</div>'+
+    lab(esc(c.p1)+' share (AUD)',fld(coll,it.id,'share',it.share,'num','auto: '+dflt));
+}
+function budsOf(sid){return arr(S.budget).filter(function(b){return b.stay===sid&&vis(b)}).sort(function(a,b){return (a.created||0)-(b.created||0)})}
+function budEditor(b,c){
+  var i=b.id,n=budDays(b);
+  return '<div class="iedit"><div class="formgrid">'+lab('What',fld('budget',i,'name',b.name,'text','e.g. Food'))+lab('Amount per day (AUD)',fld('budget',i,'rate',b.rate,'num','0.00'))+
+   lab('Amount is',sel('budget',i,'per',b.per==='total'?'total':'pp',[['pp','Per person, per day'],['total','For the whole group, per day']]))+lab('Days (blank = nights stayed)',fld('budget',i,'days',b.days,'num',String(n)))+
+   '<label class="wide">Who is this for?'+whoChips('budget',b)+'</label><div class="wide totline">'+esc(money(+b.rate||0,2)+' × '+n+' day'+(n===1?'':'s')+(b.per==='total'?'':' × '+cntOf(b)+' people')+' = '+money(budTotal(b),2)+'. Counted as an estimate in your totals.')+'</div></div><div class="iact">'+delBtn('budget',i)+'<button class="btn sm" data-exp="budget/'+esc(i)+'">Done</button></div></div>';
+}
+function brow(b,c){
+  var key='budget/'+esc(b.id),open=!!EXP['budget/'+b.id],n=budDays(b);
+  return '<div class="item bud'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">💰</span><div class="it"><b>'+esc(b.name||'Daily budget')+tagOf(b)+'</b><small>'+esc(money(+b.rate||0)+(b.per==='total'?' a day, whole group':' per person a day')+' · '+n+' day'+(n===1?'':'s')+(b.per==='total'?'':' · '+cntOf(b)+' people'))+'</small></div><span class="cost">'+money(budTotal(b))+'</span><span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open?budEditor(b,c):'')+'</div>';
 }
 function editor(coll,it,c){
   var i=it.id,f='';
@@ -733,14 +764,14 @@ function editor(coll,it,c){
   return '<div class="iedit">'+note+'<div class="formgrid">'+f+payFields(coll,it,c)+lab('Notes, booking ref or link',fld(coll,i,'notes',it.notes),'wide')+att+'</div><div class="iact">'+delBtn(coll,i)+'<button class="btn sm" data-exp="'+coll+'/'+esc(i)+'">Done</button></div></div>';
 }
 function irow(coll,it,icon,title,sub,c,noEd){
-  var key=coll+'/'+esc(it.id),open=!!EXP[coll+'/'+it.id],mk=mark(it.status),cost=+it.cost||0;
+  var key=coll+'/'+esc(it.id),open=!!EXP[coll+'/'+it.id],mk=mark(it.status),cost=costOf(it);
   return '<div class="item'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">'+icon+'</span><div class="it"><b>'+title+tagOf(it)+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div><span class="chipst '+mk[0]+'">'+mk[1]+'</span>'+(attsOf(coll+'/'+it.id).length?'<span class="cost" title="Attachments">📎'+attsOf(coll+'/'+it.id).length+'</span>':'')+(cost?'<span class="cost">'+money(cost)+'</span>':'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open&&!noEd?editor(coll,it,c):'')+'</div>';
 }
 function jrow(t,c){return irow('travel',t,ICON[t.type]||'🧭',esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')),esc(dayf(t.date)+(t.arriveDate&&t.arriveDate!==t.date?' → '+dayf(t.arriveDate):'')+(t.provider?' · '+t.provider:'')),c)}
 function arow(o,c){return irow('other',o,'🎟️',esc(o.item||'New activity'),esc(dayf(o.date)+(o.category?' · '+o.category:'')+(o.provider?' · '+o.provider:'')),c)}
 function addb(kind,label,at){var a='';Object.keys(at||{}).forEach(function(k){a+=' data-'+k+'="'+esc(at[k])+'"'});return '<button class="btn sm addb" data-iadd="'+kind+'"'+a+(RO?' disabled':'')+'>+ '+label+'</button>'}
 function flightsCard(kind,list,st,c){
-  var home=c.home||'Sydney',srt=list.slice().sort(byDate('date')),tot=0;srt.forEach(function(t){tot+=(+t.cost||0)});
+  var home=c.home||'Sydney',srt=list.slice().sort(byDate('date')),tot=0;srt.forEach(function(t){tot+=costOf(t)});
   var last=srt.length?srt[srt.length-1]:null,sub;
   if(!srt.length)sub=kind==='out'?'Add your flights to Europe':'Add your flights home';
   else sub=(kind==='out'?'Leaves ':'Leaves ')+dayf(srt[0].date)+(last&&(last.arriveDate||last.date)?(kind==='out'?' · arrives ':' · home ')+dayf(last.arriveDate||last.date):'');
@@ -778,10 +809,11 @@ function vPlan(){
   if(!n)h+='<div class="card empty" style="padding:18px">No places yet. Add your first stay to start the itinerary.</div>';
   if(n)h+=flightsCard('out',outsL,stays[0],c)+(startX.length?'<div class="leg"><div class="lbl">Travel to '+esc(stays[0].location||'first place')+'</div>'+startX.map(function(t){return jrow(t,c)}).join('')+'</div>':'<div class="leg slim"></div>');
   stays.forEach(function(s,i){
-    var bg=col[norm(s.location)]||'var(--slate)',nn=nightsOf(s.checkIn,s.checkOut),tot=(+s.cost||0);acts[i].forEach(function(o){tot+=(+o.cost||0)});
+    var bg=col[norm(s.location)]||'var(--slate)',nn=nightsOf(s.checkIn,s.checkOut),tot=costOf(s);acts[i].forEach(function(o){tot+=costOf(o)});budsOf(s.id).forEach(function(b){tot+=budTotal(b)});
     var hOpen=!!EXP['stays/'+s.id];h+='<div class="pbox"><div class="phead tap" data-exp="stays/'+esc(s.id)+'" tabindex="0" role="button" aria-expanded="'+hOpen+'" title="Tap to change the place, dates and stay details" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+'</small></div><span class="ptail">'+(tot?'<span class="ptot">'+money(tot)+'</span>':'')+'<span class="pedit">'+(hOpen?'Close ▾':'Edit ▸')+'</span></span></div>'+(hOpen?editor('stays',s,c):'');
     h+='<div class="sect"><div class="lbl">Stay · arrive from 12pm, leave by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'Stay (no name yet)'),esc('Arrive '+dayf(s.checkIn)+' · leave '+dayf(s.checkOut)),c,true)+'</div>';
     h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
+    h+='<div class="sect"><div class="lbl">Daily budget · food, metro and so on</div>'+budsOf(s.id).map(function(b){return brow(b,c)}).join('')+addb('budget','Add daily budget',{sid:s.id})+'</div>';
     h+='</div>';
     if(i<n-1){var nx=stays[i+1];var au=legAuto(s,nx);h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+(legs[i].length?legs[i].map(function(t){return jrow(t,c)}).join(''):'<div class="item auto"><div class="irow" data-autoleg="'+esc(s.id+'|'+nx.id)+'" tabindex="0" role="button"><span class="ic">🧭</span><div class="it"><b>'+esc((au.from||'?')+' → '+(au.to||'?'))+'</b><small>'+esc(dayf(au.date))+' · filled in from the two cards · tap to add train, flight, cost…</small></div><span class="chipst todo">Add details</span><span class="chev">▸</span></div></div>')+(legs[i].length?addb('travel','Add another journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||'',lf:s.id,lt:nx.id}):'')+'</div>'}
   });
@@ -805,14 +837,16 @@ document.addEventListener('click',function(e){
   if(b.dataset.leg&&S.stays[b.dataset.sid])id=add('travel',Object.assign({date:b.dataset.date||'',type:'Flight',provider:'',arriveDate:'',leg:b.dataset.leg},pay,flightAuto(b.dataset.leg,S.stays[b.dataset.sid],cfg().home||'Sydney')));
   else if(kd==='stays')id=add('stays',Object.assign({location:'',checkIn:b.dataset.date||'',checkOut:'',name:''},pay));
   else if(kd==='travel')id=add('travel',Object.assign({date:b.dataset.date||'',from:b.dataset.from||'',to:b.dataset.to||'',type:'Train',provider:''},pay,(b.dataset.lf&&S.stays[b.dataset.lf]&&S.stays[b.dataset.lt])?legAuto(S.stays[b.dataset.lf],S.stays[b.dataset.lt]):{}));
+  else if(kd==='budget'){var nb=budsOf(b.dataset.sid).length;id=add('budget',{stay:b.dataset.sid,name:BUDNAMES[Math.min(nb,BUDNAMES.length-1)],rate:null,per:'pp',days:'',for:(VIEW==='all'?'shared':VIEW)})}
   else id=add('other',Object.assign({date:b.dataset.date||'',item:'',location:b.dataset.loc||'',category:'Experience / tour',provider:''},pay));
   if(!id)return;EXP[kd+'/'+id]=true;render();
-  var f=document.getElementById(kd+'-'+id+'-'+(kd==='stays'?'location':kd==='travel'?'from':'item'));if(f)f.focus();
+  var f=document.getElementById(kd+'-'+id+'-'+(kd==='stays'?'location':kd==='travel'?'from':kd==='budget'?'rate':'item'));if(f)f.focus();
 });
 document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&(e.target.classList.contains('irow')||e.target.classList.contains('phead'))){e.preventDefault();if(e.target.dataset.autoleg){e.target.click();return}var k=e.target.dataset.exp;EXP[k]=!EXP[k];render()}});
 function vSetup(){
   var c=cfg(),n=nightsOf(c.start,c.end);
   return '<section class="card"><div class="cardhead"><div><h2>Travelling parties</h2></div></div><div class="formgrid"><label>First party<input class="in" id="meta-settings-p1" data-c="meta" data-i="settings" data-f="p1" data-t="text" value="'+esc(c.p1)+'" autocomplete="off"></label><label>Second party<input class="in" id="meta-settings-p2" data-c="meta" data-i="settings" data-f="p2" data-t="text" value="'+esc(c.p2)+'" autocomplete="off"></label></div></section>'+
+  '<section class="card"><div class="cardhead"><div><h2>Travellers</h2><p>Names of the four of you. Used to say who a price applies to.</p></div></div><div class="formgrid">'+TIDS.map(function(t){return lab(esc(PARTY(t.charAt(0)))+' traveller '+(t.charAt(1)==='a'?'1':'2'),fld('meta','settings','n'+t,c['n'+t],'text',tname(t)))}).join('')+'</div></section>'+
   '<section class="card"><div class="cardhead"><div><h2>Trip dates</h2><p>The Calendar shows every day from start to end'+(n!==''?' ('+n+' nights)':'')+'.</p></div></div><div class="formgrid"><label>Trip starts'+fld('meta','settings','start',c.start,'date')+'</label><label>Trip ends'+fld('meta','settings','end',c.end,'date')+'</label></div></section>'+
   leaveCard(c)+backupCards();
 }
@@ -849,7 +883,7 @@ function backupCards(){
 }
 function exportData(){
   var out={meta:{settings:Object.assign({},cfg())}};
-  ['stays','travel','other','days','payments'].forEach(function(c){out[c]={};Object.keys(S[c]).forEach(function(id){out[c][id]=S[c][id]})});
+  ['stays','travel','other','days','payments','budget'].forEach(function(c){out[c]={};Object.keys(S[c]).forEach(function(id){out[c][id]=S[c][id]})});
   var blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='europe-2027-backup-'+isoOf(new Date())+'.json';
   document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
@@ -860,7 +894,7 @@ function readImport(inp){
   r.onload=function(){
     try{
       var d=JSON.parse(r.result),n=0,ok=false;
-      ['stays','travel','other','days','payments'].forEach(function(c){if(d[c]&&typeof d[c]==='object'){ok=true;n+=Object.keys(d[c]).length}});
+      ['stays','travel','other','days','payments','budget'].forEach(function(c){if(d[c]&&typeof d[c]==='object'){ok=true;n+=Object.keys(d[c]).length}});
       if(d.meta&&d.meta.settings){ok=true;n++}
       if(!ok)throw new Error('bad');
       IMPORT={n:n,data:d};IMPORTERR='';
@@ -871,7 +905,7 @@ function readImport(inp){
 }
 function doImport(){
   if(!IMPORT)return;var d=IMPORT.data,ops=[];
-  ['stays','travel','other','days','payments'].forEach(function(c){if(d[c])Object.keys(d[c]).forEach(function(id){if(d[c][id]&&typeof d[c][id]==='object')ops.push([fs.doc(BASE+'/'+c+'/'+id),d[c][id]])})});
+  ['stays','travel','other','days','payments','budget'].forEach(function(c){if(d[c])Object.keys(d[c]).forEach(function(id){if(d[c][id]&&typeof d[c][id]==='object')ops.push([fs.doc(BASE+'/'+c+'/'+id),d[c][id]])})});
   if(d.meta&&d.meta.settings)ops.push([fs.doc(BASE+'/meta/settings'),d.meta.settings]);
   var chunks=[];for(var i=0;i<ops.length;i+=400)chunks.push(ops.slice(i,i+400));
   inflight++;setSync();
@@ -914,7 +948,7 @@ function renderHead(){
   $('#sub').textContent=(c.start&&c.end)?dfmt(c.start,{day:'numeric',month:'short'})+' – '+dfmt(c.end,{day:'numeric',month:'short',year:'numeric'})+(n!==''?' · '+n+' nights':'')+' · '+c.p1+' & '+c.p2:'';
   var vs=$('#viewas');if(vs)vs.innerHTML=[['all','Everyone'],['1',c.p1+' + shared'],['2',c.p2+' + shared']].map(function(o){return '<option value="'+o[0]+'"'+(o[0]===VIEW?' selected':'')+'>'+esc(o[1])+'</option>'}).join('');
 }
-function lock(){document.querySelectorAll('#view input,#view select,#view textarea,#view button[data-add],#view button[data-iadd],#view button[data-del],#view button[data-attadd],#view button[data-attdel]').forEach(function(e){e.disabled=true})}
+function lock(){document.querySelectorAll('#view input,#view select,#view textarea,#view button[data-add],#view button[data-iadd],#view button[data-del],#view button[data-who],#view button[data-attadd],#view button[data-attdel]').forEach(function(e){e.disabled=true})}
 function render(){
   var _pe=document.querySelector('.fpanel'),_pst=_pe?_pe.scrollTop:0;
   var ae0=document.activeElement;
@@ -962,6 +996,10 @@ document.addEventListener('click',function(e){
     else if(c==='travel')id=add(c,Object.assign({date:'',from:'',to:'',type:'Train',provider:''},pay));
     else if(c==='other')id=add(c,Object.assign({date:'',item:'',location:'',category:'Experience / tour',provider:''},pay));
     var f=document.getElementById(c+'-'+id+'-'+(c==='stays'?'location':c==='travel'?'date':'item'));if(f)f.focus();
+  }else if(b.dataset.who){
+    var pr=b.dataset.who.split('/'),wc=pr[0],wi=pr[1],wt=pr[2],wit=S[wc]&&S[wc][wi];
+    if(wit){wit.id=wi;var w=whoOf(wit),ix=w.indexOf(wt);if(ix>=0)w.splice(ix,1);else w.push(wt);
+      if(w.length){var nw=TIDS.filter(function(x){return w.indexOf(x)>=0}),n1=nw.filter(function(x){return x.charAt(0)==='1'}).length,n2=nw.length-n1,fr=n2===0?'1':(n1===0?'2':'shared'),pt={who:nw.join(','),for:fr};applyLocal(wc,wi,pt);save(wc,wi,pt);render()}}
   }else if(b.dataset.attadd){var inp=b.parentNode.querySelector('.attin');if(inp)inp.click();
   }else if(b.dataset.attdel){
     if(b.classList.contains('armed')){delAtt(b.dataset.attdel);render()}
@@ -982,7 +1020,7 @@ window.addEventListener('hashchange',function(){window.scrollTo(0,0);render()});
 function markLoaded(k){loadedSet[k]=1;setSync()}
 function teardown(){
   unsubs.forEach(function(u){try{u()}catch(e){}});unsubs=[];
-  loadedSet={};confirmed={};timedOut=false;S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},settings:null};
+  loadedSet={};confirmed={};timedOut=false;S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},budget:{},settings:null};
 }
 function subErr(err){
   console.error(err);
