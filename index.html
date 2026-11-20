@@ -273,14 +273,16 @@ body{margin:0}
 'use strict';
 var $=function(s){return document.querySelector(s)};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
-var COLLS=['stays','travel','other','days','payments','attachments','budget'],NEED=COLLS.length+1;
+var COLLS=['stays','travel','other','days','payments','attachments','budget','general'],NEED=COLLS.length+1;
 var STATUS=['Researching','Considering','Booked','Paid','Cancelled'];
 var TYPES=['Flight','Train','Car hire','Bus','Ferry','Taxi','Other'];
+var GENCATS=['Travel insurance','Visas and documents','SIM and data','Travel money and cards','Luggage and gear','Medical and vaccinations','Other'];
+var GENMAP={'Travel insurance':'Travel insurance','Visa / documents':'Visas and documents','eSIM / data':'SIM and data'};
 var CATS=['Experience / tour','Food & dining','Tickets / entry','Travel insurance','Visa / documents','eSIM / data','Other'];
 var PAL=['#2F5D8A','#C8553D','#2E8B7A','#8A6BB0','#D08C2B','#4E8F4A','#B2456E','#5B6C7D','#7C5E3C','#3F8FB5'];
 var DEF={p1:'Thrupps',p2:'Ameer-Begs',n1a:'',n1b:'',n2a:'',n2b:'',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,home:'Sydney',free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
-var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Itinerary'],['setup','Setup']];
-var S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},budget:{},settings:null};
+var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Itinerary'],['general','General'],['setup','Setup']];
+var S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},budget:{},general:{},settings:null};
 var db=null,RO=false,noDb=false,timedOut=false,needRender=false,pendingEdits=0,inflight=0,writeFail=false;
 var AUTH='loading',AUTHMSG='',AUTHEMAIL='',PENDING_LINK=false,IMPORT=null,IMPORTERR='',USERMAIL='',auth=null,fs=null,unsubs=[];
 var BASE='trips/main';
@@ -408,6 +410,7 @@ function allItems(){
   arr(S.stays).forEach(function(x){x.kind='stays';x.label=x.location;x.bucket='Accommodation';out.push(x)});
   arr(S.travel).forEach(function(x){x.kind='travel';x.label=x.from||x.to;x.bucket=({'Flight':'Flights','Train':'Trains','Car hire':'Car hire'})[x.type]||'Other transport';out.push(x)});
   arr(S.other).forEach(function(x){x.kind='other';x.label=x.item;x.bucket='Other bookings';out.push(x)});
+  arr(S.general).forEach(function(x){x.kind='general';x.label=x.item;x.bucket='General expenses';out.push(x)});
   return out;
 }
 var TIDS=['1a','1b','2a','2b'];
@@ -437,7 +440,7 @@ function itChip(it){var n=cntOf(it);return chipHtml(costOf(it),shareOf(it),n,it.
 var BUDNAMES=['Food','Metro / local transport','Taxis and rideshare','Groceries','Spending money','Other'];
 function calc(){
   var its=allItems(),T={c1:0,c2:0,pd1:0,pd2:0,cost:0,paid:0,yet:0,paid1:0,paid2:0,fair1:0,yet1:0,missing:0,n:0,done:0,types:{}};
-  ['Accommodation','Flights','Trains','Car hire','Other transport','Other bookings','Daily budget'].forEach(function(k){T.types[k]={cost:0,paid:0,c1:0,c2:0,pd1:0,pd2:0}});
+  ['Accommodation','Flights','Trains','Car hire','Other transport','Other bookings','General expenses','Daily budget'].forEach(function(k){T.types[k]={cost:0,paid:0,c1:0,c2:0,pd1:0,pd2:0}});
   its.forEach(function(it){
     var canc=it.status==='Cancelled',cost=costOf(it),isPaid=it.status==='Paid';
     var sh1=Math.min(cost,shareOf(it)),sh2=cost-sh1,vs=vis(it);
@@ -797,6 +800,7 @@ function editor(coll,it,c){
   var i=it.id,f='';
   if(coll==='stays')f=lab('Place',fld(coll,i,'location',it.location))+lab('Arrive (from 12pm)',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Leave (by 12pm)',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Stay name',fld(coll,i,'name',it.name));
   else if(coll==='travel')f=lab(it.leg?'Leaves':'Date',fld(coll,i,'date',it.date,'date'))+lab('Arrives (if a different day)',fld(coll,i,'arriveDate',it.arriveDate,'date'))+lab('From (type, or pick a place)',fld(coll,i,'from',it.from).replace('<input ','<input list="placelist" '))+lab('To (type, or pick a place)',fld(coll,i,'to',it.to).replace('<input ','<input list="placelist" '))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
+  else if(coll==='general')f=lab('What',fld(coll,i,'item',it.item))+lab('Category',sel(coll,i,'category',it.category,GENCATS))+lab('Date (due or paid)',fld(coll,i,'date',it.date,'date'))+lab('Provider',fld(coll,i,'provider',it.provider));
   else f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('What',fld(coll,i,'item',it.item))+lab('Place',fld(coll,i,'location',it.location))+lab('Category',sel(coll,i,'category',it.category,CATS))+lab('Provider',fld(coll,i,'provider',it.provider));
   var note='';
   if(coll==='travel'&&it.legFrom&&S.stays[it.legFrom]&&S.stays[it.legTo])note='<div class="legnote">Linked to <b>'+esc((S.stays[it.legFrom].location||'?')+' → '+(S.stays[it.legTo].location||'?'))+'</b>. From, To and Date follow those two cards and reset whenever either card changes. You can type over From and To yourself (for example an airport or station) and they will stay until a place card changes. <button class="btn sm" data-relink="'+esc(i)+'">Match the cards now</button></div>';
@@ -811,6 +815,18 @@ function irow(coll,it,icon,title,sub,c,noEd){
   return '<div class="item'+(open?' open':'')+(coll==='travel'&&it.fresh&&!hasInfo(it)?' needinfo':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">'+icon+'</span><div class="it"><b>'+title+tagOf(it)+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div><span class="chipst '+mk[0]+'">'+mk[1]+'</span>'+(attsOf(coll+'/'+it.id).length?'<span class="cost" title="Attachments">📎'+attsOf(coll+'/'+it.id).length+'</span>':'')+itChip(it)+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open&&!noEd?editor(coll,it,c):'')+'</div>';
 }
 function jrow(t,c){return irow('travel',t,ICON[t.type]||'🧭',esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')),esc(dayf(t.date)+(t.arriveDate&&t.arriveDate!==t.date?' → '+dayf(t.arriveDate):'')+(t.provider?' · '+t.provider:'')),c)}
+function grow(o,c){return irow('general',o,'🧾',esc(o.item||'New expense'),esc((o.category||'')+(o.date?' · '+dayf(o.date):'')+(o.provider?' · '+o.provider:'')),c)}
+function vGeneral(){
+  var c=cfg(),its=arr(S.general).filter(vis).sort(byDate('date')),info=sumInfo(its),h='';
+  var mv=arr(S.other).filter(function(o){return GENMAP[o.category]});
+  h+='<p class="how">Costs that are not tied to one place: travel insurance, visas, SIM cards, luggage and so on. They work like every other item, with a status, who it is for, who paid and a share, and they count in the Summary.</p>';
+  if(mv.length&&!RO)h+='<div class="notice">'+mv.length+' item'+(mv.length>1?'s':'')+' in your Itinerary '+(mv.length>1?'look':'looks')+' like general expenses ('+esc(mv.map(function(o){return o.item||o.category}).join(', '))+'). <button class="btn sm" data-movegen="1">Move '+(mv.length>1?'them':'it')+' here</button></div>';
+  h+='<div class="pbox fbox"><div class="phead" style="background:var(--slate)"><div><h3>🧾 General expenses</h3><small>'+its.length+' item'+(its.length===1?'':'s')+'</small></div>'+ptotHtml(info)+'</div><div class="sect">';
+  var cats=GENCATS.slice();its.forEach(function(o){if(cats.indexOf(o.category)<0)cats.push(o.category||'Other')});
+  cats.forEach(function(k){var l=its.filter(function(o){return (o.category||'Other')===k});if(l.length)h+='<div class="lbl">'+esc(k)+'</div>'+l.map(function(o){return grow(o,c)}).join('')});
+  if(!its.length)h+='<p class="how">Nothing here yet.</p>';
+  return h+addb('general','Add expense',{})+'</div></div>';
+}
 function arow(o,c){return irow('other',o,'🎟️',esc(o.item||'New activity'),esc(dayf(o.date)+(o.category?' · '+o.category:'')+(o.provider?' · '+o.provider:'')),c)}
 function addb(kind,label,at){var a='';Object.keys(at||{}).forEach(function(k){a+=' data-'+k+'="'+esc(at[k])+'"'});return '<button class="btn sm addb" data-iadd="'+kind+'"'+a+(RO?' disabled':'')+'>+ '+label+'</button>'}
 function flightsCard(kind,list,st,c){
@@ -881,6 +897,7 @@ document.addEventListener('click',function(e){
   else if(kd==='stays')id=add('stays',Object.assign({location:'',checkIn:b.dataset.date||'',checkOut:'',name:''},pay));
   else if(kd==='travel')id=add('travel',Object.assign({date:b.dataset.date||'',from:b.dataset.from||'',to:b.dataset.to||'',type:'Train',provider:''},pay,(b.dataset.lf&&S.stays[b.dataset.lf]&&S.stays[b.dataset.lt])?legAuto(S.stays[b.dataset.lf],S.stays[b.dataset.lt]):{}));
   else if(kd==='budget'){var nb=budsOf(b.dataset.sid).length;id=add('budget',{stay:b.dataset.sid,name:BUDNAMES[Math.min(nb,BUDNAMES.length-1)],rate:null,per:'pp',days:'',for:(VIEW==='all'?'shared':VIEW)})}
+  else if(kd==='general')id=add('general',Object.assign({date:'',item:'',category:GENCATS[0],provider:''},pay));
   else id=add('other',Object.assign({date:b.dataset.date||'',item:'',location:b.dataset.loc||'',category:'Experience / tour',provider:''},pay));
   if(!id)return;EXP[kd+'/'+id]=true;render();
   var f=document.getElementById(kd+'-'+id+'-'+(kd==='stays'?'location':kd==='travel'?'from':kd==='budget'?'rate':'item'));if(f)f.focus();
@@ -926,7 +943,7 @@ function backupCards(){
 }
 function exportData(){
   var out={meta:{settings:Object.assign({},cfg())}};
-  ['stays','travel','other','days','payments','budget'].forEach(function(c){out[c]={};Object.keys(S[c]).forEach(function(id){out[c][id]=S[c][id]})});
+  ['stays','travel','other','days','payments','budget','general'].forEach(function(c){out[c]={};Object.keys(S[c]).forEach(function(id){out[c][id]=S[c][id]})});
   var blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='europe-2027-backup-'+isoOf(new Date())+'.json';
   document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
@@ -937,7 +954,7 @@ function readImport(inp){
   r.onload=function(){
     try{
       var d=JSON.parse(r.result),n=0,ok=false;
-      ['stays','travel','other','days','payments','budget'].forEach(function(c){if(d[c]&&typeof d[c]==='object'){ok=true;n+=Object.keys(d[c]).length}});
+      ['stays','travel','other','days','payments','budget','general'].forEach(function(c){if(d[c]&&typeof d[c]==='object'){ok=true;n+=Object.keys(d[c]).length}});
       if(d.meta&&d.meta.settings){ok=true;n++}
       if(!ok)throw new Error('bad');
       IMPORT={n:n,data:d};IMPORTERR='';
@@ -948,7 +965,7 @@ function readImport(inp){
 }
 function doImport(){
   if(!IMPORT)return;var d=IMPORT.data,ops=[];
-  ['stays','travel','other','days','payments','budget'].forEach(function(c){if(d[c])Object.keys(d[c]).forEach(function(id){if(d[c][id]&&typeof d[c][id]==='object')ops.push([fs.doc(BASE+'/'+c+'/'+id),d[c][id]])})});
+  ['stays','travel','other','days','payments','budget','general'].forEach(function(c){if(d[c])Object.keys(d[c]).forEach(function(id){if(d[c][id]&&typeof d[c][id]==='object')ops.push([fs.doc(BASE+'/'+c+'/'+id),d[c][id]])})});
   if(d.meta&&d.meta.settings)ops.push([fs.doc(BASE+'/meta/settings'),d.meta.settings]);
   var chunks=[];for(var i=0;i<ops.length;i+=400)chunks.push(ops.slice(i,i+400));
   inflight++;setSync();
@@ -982,7 +999,7 @@ function doAct(a){
   else if(a==='doimport'){doImport()}
   else if(a==='cancelimport'){IMPORT=null;render()}
 }
-var VIEWS={summary:vSummary,calendar:vCalendar,plan:vPlan,setup:vSetup};
+var VIEWS={summary:vSummary,calendar:vCalendar,plan:vPlan,general:vGeneral,setup:vSetup};
 var curView=function(){var h=location.hash.replace('#','');return VIEWS[h]?h:'summary'};
 
 /* ---------- render ---------- */
@@ -1043,6 +1060,13 @@ document.addEventListener('click',function(e){
     var pr=b.dataset.who.split('/'),wc=pr[0],wi=pr[1],wt=pr[2],wit=S[wc]&&S[wc][wi];
     if(wit){wit.id=wi;var w=whoOf(wit),ix=w.indexOf(wt);if(ix>=0)w.splice(ix,1);else w.push(wt);
       if(w.length){var nw=TIDS.filter(function(x){return w.indexOf(x)>=0}),n1=nw.filter(function(x){return x.charAt(0)==='1'}).length,n2=nw.length-n1,fr=n2===0?'1':(n1===0?'2':'shared'),pt={who:nw.join(','),for:fr};applyLocal(wc,wi,pt);save(wc,wi,pt);render()}}
+  }else if(b.dataset.movegen){
+    arr(S.other).filter(function(o){return GENMAP[o.category]}).forEach(function(o){
+      var d={item:o.item||'',category:GENMAP[o.category],date:o.date||'',provider:o.provider||'',status:o.status||'Researching',for:o.for||'shared',cost:o.cost==null?null:o.cost,paidBy:o.paidBy||'',share:o.share==null?null:o.share,notes:o.notes||'',per:o.per||'total',who:o.who||''};
+      var nid=add('general',d);if(!nid)return;
+      attsOf('other/'+o.id).forEach(function(a){var pt={item:'general/'+nid};applyLocal('attachments',a.id,pt);save('attachments',a.id,pt)});
+      remove('other',o.id)});
+    render();
   }else if(b.dataset.attadd){var inp=b.parentNode.querySelector('.attin');if(inp)inp.click();
   }else if(b.dataset.attdel){
     if(b.classList.contains('armed')){delAtt(b.dataset.attdel);render()}
@@ -1063,7 +1087,7 @@ window.addEventListener('hashchange',function(){window.scrollTo(0,0);render()});
 function markLoaded(k){loadedSet[k]=1;setSync()}
 function teardown(){
   unsubs.forEach(function(u){try{u()}catch(e){}});unsubs=[];
-  loadedSet={};confirmed={};timedOut=false;S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},budget:{},settings:null};
+  loadedSet={};confirmed={};timedOut=false;S={stays:{},travel:{},other:{},days:{},payments:{},attachments:{},budget:{},general:{},settings:null};
 }
 function subErr(err){
   console.error(err);
