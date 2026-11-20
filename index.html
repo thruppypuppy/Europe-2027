@@ -201,6 +201,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .cost{font-weight:700;font-size:13px;white-space:nowrap}.chev{color:var(--muted);flex:none}
 .iedit{border-top:1px solid var(--line);padding:2px 0 12px}
 .iedit .formgrid{padding:10px 14px 4px}.iedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}.iedit label.wide{grid-column:1/-1}
+.item.needinfo{border:2px solid #f2b705;box-shadow:0 0 0 3px rgba(242,183,5,.22)}
 .whochips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.whochip{border:1px solid var(--line,#ccc);background:transparent;color:inherit;border-radius:99px;padding:5px 11px;font-size:13px;cursor:pointer}.whochip.on{background:var(--blue,#2563eb);border-color:var(--blue,#2563eb);color:#fff;font-weight:600}.totline{font-size:13px;color:#888}.bud .irow .ic{font-size:18px}
 .attbox{grid-column:1/-1;border-top:1px dashed var(--line,#ddd);padding-top:8px}.attbox h4{margin:0 0 6px;font-size:13px}.attrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}.attrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attrow small{color:#888}.attmsg{font-size:12px;color:#888;margin-top:4px}.attin{display:none}
 .iact{display:flex;justify-content:space-between;align-items:center;padding:6px 14px 0}
@@ -687,7 +688,7 @@ document.addEventListener('dragstart',function(e){var d=e.target.closest&&e.targ
 document.addEventListener('dragend',function(){dragSid=null;document.querySelectorAll('.dragging,.dropt').forEach(function(x){x.classList.remove('dragging','dropt')})});
 document.addEventListener('dragover',function(e){var d=e.target.closest&&e.target.closest('.cday[data-day]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();document.querySelectorAll('.dropt').forEach(function(x){x.classList.remove('dropt')});d.classList.add('dropt')});
 document.addEventListener('drop',function(e){var d=e.target.closest&&e.target.closest('.cday[data-day]');if(!d||!dragSid||!PLAN.on)return;e.preventDefault();var n=nightsOf(dragFrom,d.dataset.day),id=dragSid;dragSid=null;if(n){planShift(id,n);render()}});
-function legAuto(A,B){return {from:A.location||'',to:B.location||'',date:A.checkOut||B.checkIn||'',legFrom:A.id,legTo:B.id,sig:[A.id,A.location,A.checkOut,B.id,B.location,B.checkIn].join('|')}}
+function legAuto(A,B){return {from:A.location||'',to:B.location||'',date:A.checkOut||B.checkIn||'',legFrom:A.id,legTo:B.id,autoFrom:A.location||'',autoTo:B.location||'',sig:[A.id,A.location,A.checkOut,B.id,B.location,B.checkIn].join('|')}}
 function flightAuto(kind,st,home){return {from:kind==='out'?home:(st.location||''),to:kind==='out'?(st.location||''):home,sig:kind+'|'+st.id+'|'+st.location+'|'+home}}
 var syncT=null;
 function scheduleSync(){if(syncT)return;syncT=setTimeout(function(){syncT=null;syncLegs()},60)}
@@ -695,22 +696,40 @@ function syncLegs(){
   if(RO||PLAN.on||Object.keys(loadedSet).length<NEED)return;
   var st=arr(S.stays).filter(function(x){return norm(x.location)&&x.checkIn&&x.checkOut&&x.checkOut>x.checkIn}).sort(byDate('checkIn')),pairs={},list=[];
   for(var i=0;i<st.length-1;i++){var a=legAuto(st[i],st[i+1]);pairs[a.legFrom+'>'+a.legTo]=a;list.push(a)}
-  var n=0;
-  arr(S.travel).forEach(function(t){
-    var pt=null;
-    if(t.legFrom&&t.legTo){var a=pairs[t.legFrom+'>'+t.legTo];
-      if(!a)pt={legFrom:'',legTo:'',sig:''};
-      else if(t.sig!==a.sig)pt={from:a.from,to:a.to,date:a.date,sig:a.sig};
-    }else if(t.from&&t.to){var bd=1e9,bp=null;
-      list.forEach(function(a){if(norm(a.from)===norm(t.from)&&norm(a.to)===norm(t.to)){var d=Math.abs(+nightsOf(t.date||a.date,a.date)||0);if(d<bd){bd=d;bp=a}}});
-      if(bp)pt={legFrom:bp.legFrom,legTo:bp.legTo,sig:bp.sig};
-      else if(st.length){var cc=cfg(),hn=norm(cc.home||'Sydney'),f0=st[0],l0=st[st.length-1];
-        if(!t.leg&&norm(t.from)===hn&&norm(t.to)===norm(f0.location)){var o1=flightAuto('out',f0,cc.home||'Sydney');pt={leg:'out',sig:o1.sig}}
-        else if(!t.leg&&norm(t.from)===norm(l0.location)&&norm(t.to)===hn){var o2=flightAuto('home',l0,cc.home||'Sydney');pt={leg:'home',sig:o2.sig};if(!t.arriveDate&&cc.end>t.date)pt.arriveDate=cc.end}
-      }
+  var n=0,taken={},orph=[],trv=arr(S.travel);
+  var RESET={type:'Train',provider:'',cost:null,status:'Researching',paidBy:'',share:null,notes:'',arriveDate:'',per:'total',who:'',fresh:true};
+  var link=function(a,reset){var o={from:a.from,to:a.to,date:a.date,legFrom:a.legFrom,legTo:a.legTo,sig:a.sig,autoFrom:a.from,autoTo:a.to};return reset?Object.assign(o,RESET):o};
+  var ap=function(t,pt){applyLocal('travel',t.id,pt);save('travel',t.id,pt);n++};
+  var byName=function(f,to,d){var bd=1e9,bp=null;list.forEach(function(a){if(norm(a.from)===norm(f)&&norm(a.to)===norm(to)){var x=Math.abs(+nightsOf(d||a.date,a.date)||0);if(x<bd){bd=x;bp=a}}});return bp};
+  trv.forEach(function(t){if(t.legFrom&&t.legTo&&pairs[t.legFrom+'>'+t.legTo])taken[t.legFrom+'>'+t.legTo]=1});
+  trv.forEach(function(t){
+    if(!(t.legFrom&&t.legTo))return;
+    var a=pairs[t.legFrom+'>'+t.legTo];
+    if(a){taken[t.legFrom+'>'+t.legTo]=1;
+      if(t.sig!==a.sig){
+        var af=t.autoFrom!=null?t.autoFrom:t.from,at=t.autoTo!=null?t.autoTo:t.to;
+        if(norm(af)!==norm(a.from)||norm(at)!==norm(a.to))ap(t,link(a,true));
+        else ap(t,{from:a.from,to:a.to,date:a.date,sig:a.sig,autoFrom:a.from,autoTo:a.to});
+      }else if(t.autoFrom==null){applyLocal('travel',t.id,{autoFrom:a.from,autoTo:a.to});save('travel',t.id,{autoFrom:a.from,autoTo:a.to})}
+      return}
+    var bp=byName(t.autoFrom!=null?t.autoFrom:t.from,t.autoTo!=null?t.autoTo:t.to,t.date);
+    if(bp){taken[bp.legFrom+'>'+bp.legTo]=1;ap(t,link(bp,false));return}
+    orph.push(t)});
+  trv.forEach(function(t){
+    if(t.legFrom&&t.legTo)return;
+    if(!(t.from&&t.to))return;
+    var bp=byName(t.from,t.to,t.date),pt=null;
+    if(bp){taken[bp.legFrom+'>'+bp.legTo]=1;pt={legFrom:bp.legFrom,legTo:bp.legTo,sig:bp.sig,autoFrom:bp.from,autoTo:bp.to}}
+    else if(st.length){var cc=cfg(),hn=norm(cc.home||'Sydney'),f0=st[0],l0=st[st.length-1];
+      if(!t.leg&&norm(t.from)===hn&&norm(t.to)===norm(f0.location)){var o1=flightAuto('out',f0,cc.home||'Sydney');pt={leg:'out',sig:o1.sig}}
+      else if(!t.leg&&norm(t.from)===norm(l0.location)&&norm(t.to)===hn){var o2=flightAuto('home',l0,cc.home||'Sydney');pt={leg:'home',sig:o2.sig};if(!t.arriveDate&&cc.end>t.date)pt.arriveDate=cc.end}
     }
-    if(pt){applyLocal('travel',t.id,pt);save('travel',t.id,pt);n++}
-  });
+    if(pt)ap(t,pt)});
+  orph.forEach(function(t){
+    var best=null,bd=1e9;
+    list.forEach(function(a){var k=a.legFrom+'>'+a.legTo;if(taken[k])return;if(a.legFrom!==t.legFrom&&a.legTo!==t.legTo)return;var x=Math.abs(+nightsOf(t.date||a.date,a.date)||0)+(a.legFrom===t.legFrom?0:0.5);if(x<bd){bd=x;best=a}});
+    if(best){taken[best.legFrom+'>'+best.legTo]=1;ap(t,link(best,true))}
+    else ap(t,{legFrom:'',legTo:'',sig:''})});
   if(st.length){
     var c0=cfg(),home=c0.home||'Sydney',first=st[0],last=st[st.length-1];
     var outs=arr(S.travel).filter(function(t){return t.leg==='out'}).sort(byDate('date')),homes=arr(S.travel).filter(function(t){return t.leg==='home'}).sort(byDate('date'));
@@ -763,9 +782,10 @@ function editor(coll,it,c){
   var att='<div class="attbox"><h4>Attachments</h4>'+(al||'<div class="attmsg">No files yet.</div>')+(RO?'':'<button class="btn sm" data-attadd="'+esc(ak)+'">+ Add file</button><input class="attin" type="file" data-attin="'+esc(ak)+'">')+'<div class="attmsg" data-attmsg="'+esc(ak)+'">'+esc(ATTMSG[ak]||'')+'</div></div>';
   return '<div class="iedit">'+note+'<div class="formgrid">'+f+payFields(coll,it,c)+lab('Notes, booking ref or link',fld(coll,i,'notes',it.notes),'wide')+att+'</div><div class="iact">'+delBtn(coll,i)+'<button class="btn sm" data-exp="'+coll+'/'+esc(i)+'">Done</button></div></div>';
 }
+var hasInfo=function(t){return !!(t.provider||t.cost||t.notes||t.paidBy||(t.status&&t.status!=='Researching')||(t.type&&t.type!=='Train'))};
 function irow(coll,it,icon,title,sub,c,noEd){
   var key=coll+'/'+esc(it.id),open=!!EXP[coll+'/'+it.id],mk=mark(it.status),cost=costOf(it);
-  return '<div class="item'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">'+icon+'</span><div class="it"><b>'+title+tagOf(it)+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div><span class="chipst '+mk[0]+'">'+mk[1]+'</span>'+(attsOf(coll+'/'+it.id).length?'<span class="cost" title="Attachments">📎'+attsOf(coll+'/'+it.id).length+'</span>':'')+(cost?'<span class="cost">'+money(cost)+'</span>':'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open&&!noEd?editor(coll,it,c):'')+'</div>';
+  return '<div class="item'+(open?' open':'')+(coll==='travel'&&it.fresh&&!hasInfo(it)?' needinfo':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">'+icon+'</span><div class="it"><b>'+title+tagOf(it)+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div><span class="chipst '+mk[0]+'">'+mk[1]+'</span>'+(attsOf(coll+'/'+it.id).length?'<span class="cost" title="Attachments">📎'+attsOf(coll+'/'+it.id).length+'</span>':'')+(cost?'<span class="cost">'+money(cost)+'</span>':'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open&&!noEd?editor(coll,it,c):'')+'</div>';
 }
 function jrow(t,c){return irow('travel',t,ICON[t.type]||'🧭',esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')),esc(dayf(t.date)+(t.arriveDate&&t.arriveDate!==t.date?' → '+dayf(t.arriveDate):'')+(t.provider?' · '+t.provider:'')),c)}
 function arow(o,c){return irow('other',o,'🎟️',esc(o.item||'New activity'),esc(dayf(o.date)+(o.category?' · '+o.category:'')+(o.provider?' · '+o.provider:'')),c)}
@@ -815,7 +835,7 @@ function vPlan(){
     h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
     h+='<div class="sect"><div class="lbl">Daily budget · food, metro and so on</div>'+budsOf(s.id).map(function(b){return brow(b,c)}).join('')+addb('budget','Add daily budget',{sid:s.id})+'</div>';
     h+='</div>';
-    if(i<n-1){var nx=stays[i+1];var au=legAuto(s,nx);h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+(legs[i].length?legs[i].map(function(t){return jrow(t,c)}).join(''):'<div class="item auto"><div class="irow" data-autoleg="'+esc(s.id+'|'+nx.id)+'" tabindex="0" role="button"><span class="ic">🧭</span><div class="it"><b>'+esc((au.from||'?')+' → '+(au.to||'?'))+'</b><small>'+esc(dayf(au.date))+' · filled in from the two cards · tap to add train, flight, cost…</small></div><span class="chipst todo">Add details</span><span class="chev">▸</span></div></div>')+(legs[i].length?addb('travel','Add another journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||'',lf:s.id,lt:nx.id}):'')+'</div>'}
+    if(i<n-1){var nx=stays[i+1];var au=legAuto(s,nx);h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+(legs[i].length?legs[i].map(function(t){return jrow(t,c)}).join(''):'<div class="item auto needinfo"><div class="irow" data-autoleg="'+esc(s.id+'|'+nx.id)+'" tabindex="0" role="button"><span class="ic">🧭</span><div class="it"><b>'+esc((au.from||'?')+' → '+(au.to||'?'))+'</b><small>'+esc(dayf(au.date))+' · filled in from the two cards · tap to add train, flight, cost…</small></div><span class="chipst todo">Add details</span><span class="chev">▸</span></div></div>')+(legs[i].length?addb('travel','Add another journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||'',lf:s.id,lt:nx.id}):'')+'</div>'}
   });
   if(n){var lastS=stays[n-1];for(var q=n-1;q>=0;q--)if(stays[q].checkOut){lastS=stays[q];break}h+=(endX.length?'<div class="leg"><div class="lbl">Travel on from '+esc(lastS.location||'last place')+'</div>'+endX.map(function(t){return jrow(t,c)}).join('')+'</div>':'<div class="leg slim"></div>')+flightsCard('home',homesL,lastS,c)}
   h+='</div><div class="itinfoot">'+addb('stays','Add a place',{})+'</div>';
