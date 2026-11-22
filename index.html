@@ -476,6 +476,7 @@ function issues(){
   var c=cfg(),out=[];
   if(!c.start||!c.end||c.end<c.start)return out;
   for(var d=c.start;d<c.end;d=addDays(d,1)){if(!stayOn(d)&&!flightOn(d,true))out.push('No stay recorded for the night of '+dfmt(d)+'.')}
+  arr(S.stays).filter(vis).forEach(function(st){if(st.day)return;var pc=placeCover(st);pc.gaps.forEach(function(g){out.push('No hotel or stay recorded in '+(st.location||'a place')+' from '+dfmt(g[0])+' to '+dfmt(g[1])+'.')});pc.over.forEach(function(g){out.push('Two stays overlap in '+(st.location||'a place')+' from '+dfmt(g[0])+' to '+dfmt(g[1])+'.')})});
   arr(S.travel).filter(vis).sort(byDate('date')).forEach(function(t){
     if(!t.date)return;var lab=(t.type||'Journey').toLowerCase()+' '+(t.from||'?')+' → '+(t.to||'?')+' on '+dfmt(t.date);
     var prev=addDays(t.date,-1),dF=S.stays[t.legFrom]&&S.stays[t.legFrom].day,dT=S.stays[t.legTo]&&S.stays[t.legTo].day;
@@ -573,6 +574,14 @@ function planStart(){
 function planChanged(){return PLAN.ids.some(function(id){return PLAN.d[id].checkIn!==PLAN.base[id].checkIn||PLAN.d[id].checkOut!==PLAN.base[id].checkOut})}
 function planShift(id,n){var x=PLAN.d[id];if(!x||!n)return;x.checkIn=addDays(x.checkIn,n);x.checkOut=addDays(x.checkOut,n)}
 function planNights(id,n){var x=PLAN.d[id],co=addDays(x.checkOut,n);if(co>x.checkIn)x.checkOut=co}
+function planNightsFix(id,d,dl){
+  var ps=S.stays[id];if(!(ps&&ps.hIn))return;
+  var ex=nightsOf(addDays(PLAN.base[id].checkOut,dl===''?0:dl),d.checkOut);if(ex===''||!ex)return;
+  var best={k:'stays',id:id,out:ps.hOut||ps.hIn};
+  arr(S.lodging).forEach(function(l){if(l.stay===id&&l.checkOut&&l.checkOut>=best.out)best={k:'lodging',id:l.id,out:l.checkOut}});
+  var pt=best.k==='stays'?{hOut:addDays(best.out,ex)}:{checkOut:addDays(best.out,ex)};
+  applyLocal(best.k,best.id,pt);save(best.k,best.id,pt);
+}
 function planCommit(){
   var moved=0,jm=0,jpatch={};
   if(PLAN.moveJ)arr(S.travel).forEach(function(t){
@@ -582,7 +591,7 @@ function planCommit(){
       if(t.date===b.checkOut&&norm(t.from)===norm(b.location)&&d.checkOut!==b.checkOut){jpatch[t.id]={date:d.checkOut};return}
     }
   });
-  PLAN.ids.forEach(function(id){var d=PLAN.d[id];if(d.checkIn!==PLAN.base[id].checkIn||d.checkOut!==PLAN.base[id].checkOut){var pt={checkIn:d.checkIn,checkOut:d.checkOut};applyLocal('stays',id,pt);save('stays',id,pt);moved++;var dl=nightsOf(PLAN.base[id].checkIn,d.checkIn);if(dl!==''&&dl!==0)arr(S.lodging).forEach(function(l){if(l.stay===id){var lp={checkIn:l.checkIn?addDays(l.checkIn,dl):l.checkIn,checkOut:l.checkOut?addDays(l.checkOut,dl):l.checkOut};applyLocal('lodging',l.id,lp);save('lodging',l.id,lp)}})}});
+  PLAN.ids.forEach(function(id){var d=PLAN.d[id];if(d.checkIn!==PLAN.base[id].checkIn||d.checkOut!==PLAN.base[id].checkOut){var pt={checkIn:d.checkIn,checkOut:d.checkOut};applyLocal('stays',id,pt);save('stays',id,pt);moved++;var dl=nightsOf(PLAN.base[id].checkIn,d.checkIn);var ps0=S.stays[id];if(ps0&&ps0.hIn&&dl!==''&&dl!==0){var hp={hIn:addDays(ps0.hIn,dl),hOut:addDays(ps0.hOut||ps0.hIn,dl)};applyLocal('stays',id,hp);save('stays',id,hp)}if(dl!==''&&dl!==0)arr(S.lodging).forEach(function(l){if(l.stay===id){var lp={checkIn:l.checkIn?addDays(l.checkIn,dl):l.checkIn,checkOut:l.checkOut?addDays(l.checkOut,dl):l.checkOut};applyLocal('lodging',l.id,lp);save('lodging',l.id,lp)}});planNightsFix(id,d,dl)}});
   Object.keys(jpatch).forEach(function(id){applyLocal('travel',id,jpatch[id]);save('travel',id,jpatch[id]);jm++});
   PLAN.on=false;PLAN.msgAt=Date.now();PLAN.msg=moved?('Dates set: '+moved+' stay'+(moved>1?'s':'')+' updated'+(jm?' and '+jm+' journey'+(jm>1?'s':'')+' moved':'')+' in the Itinerary.'):'';
   render();
@@ -613,7 +622,7 @@ function occ(d){
   var L=(STAYS_OVR||arr(S.stays)).filter(vis).filter(function(s){return s.checkIn&&s.checkOut&&s.checkOut>s.checkIn}).sort(byDate('checkIn'));
   return {am:L.filter(function(s){return s.checkIn<d&&d<=s.checkOut}),pm:L.filter(function(s){return s.checkIn<=d&&d<s.checkOut})};
 }
-function hotelOn(st,d,cap){var q=cap==='Until 12pm'?addDays(d,-1):d,m=null;arr(S.lodging).forEach(function(l){if(l.stay===st.id&&l.checkIn&&l.checkOut&&l.checkIn<=q&&q<l.checkOut)m=l});return m?(m.name||''):(st.name||'')}
+function hotelOn(st,d,cap){var q=cap==='Until 12pm'?addDays(d,-1):d,m=null;hotelsOf(st).forEach(function(h){if(h.in<=q&&q<h.out)m=h});return m?(m.name||''):(st.name||'')}
 function vCalendarInner(c,P){
   var stays=arr(S.stays).filter(vis).sort(byDate('checkIn')),tr=arr(S.travel).filter(vis).sort(byDate('date')),oth=arr(S.other).filter(vis);
   var col={},order=[];
@@ -730,9 +739,22 @@ function scheduleSync(){if(syncT)return;syncT=setTimeout(function(){syncT=null;s
 function syncLegs(){
   if(RO||PLAN.on||Object.keys(loadedSet).length<NEED)return;
   arr(S.stays).forEach(function(x){if(x.day&&x.checkIn&&x.checkOut!==x.checkIn){x.checkOut=x.checkIn;applyLocal('stays',x.id,{checkOut:x.checkIn});save('stays',x.id,{checkOut:x.checkIn})}});
+  var spn=0;
+  arr(S.stays).forEach(function(x){
+    if(x.day)return;
+    var all=arr(S.lodging).filter(function(l){return l.stay===x.id});
+    if(!all.length){if(x.hIn||x.hOut){var cp={hIn:'',hOut:''};applyLocal('stays',x.id,cp);save('stays',x.id,cp)}return}
+    if(!x.hIn&&x.checkIn){var ip={hIn:x.checkIn,hOut:x.checkOut||x.checkIn};applyLocal('stays',x.id,ip);save('stays',x.id,ip);x.hIn=ip.hIn;x.hOut=ip.hOut}
+    var ins=[],outs=[];
+    if(x.hIn){ins.push(x.hIn);outs.push(x.hOut||x.hIn)}
+    all.forEach(function(l){if(l.checkIn)ins.push(l.checkIn);if(l.checkOut)outs.push(l.checkOut)});
+    if(!ins.length||!outs.length)return;
+    var mi=ins.slice().sort()[0],mo=outs.slice().sort().pop();
+    if(mi!==x.checkIn||mo!==x.checkOut){var sp={checkIn:mi,checkOut:mo};applyLocal('stays',x.id,sp);save('stays',x.id,sp);spn++}
+  });
   var st=arr(S.stays).filter(function(x){return norm(x.location)&&x.checkIn&&x.checkOut&&(x.checkOut>x.checkIn||x.day)}).sort(stayCmp),pairs={},list=[];
   for(var i=0;i<st.length-1;i++){var a=legAuto(st[i],st[i+1]);pairs[a.legFrom+'>'+a.legTo]=a;list.push(a)}
-  var n=0,taken={},orph=[],trv=arr(S.travel);
+  var n=spn,taken={},orph=[],trv=arr(S.travel);
   var RESET={type:'Train',provider:'',cost:null,status:'Researching',paidBy:'',share:null,notes:'',arriveDate:'',per:'total',who:'',fresh:true};
   var link=function(a,reset){var o={from:a.from,to:a.to,date:a.date,legFrom:a.legFrom,legTo:a.legTo,sig:a.sig,autoFrom:a.from,autoTo:a.to};return reset?Object.assign(o,RESET):o};
   var ap=function(t,pt){applyLocal('travel',t.id,pt);save('travel',t.id,pt);n++};
@@ -796,6 +818,29 @@ function payFields(coll,it,c){
     '<div class="wide totline">'+esc(totLine(it))+(it.status!=='Paid'&&paidOf(it)>0?'. Paid '+money(paidOf(it),2)+', '+money(costOf(it)-paidOf(it),2)+' still to pay':'')+'</div>'+
     lab(esc(c.p1)+' share (AUD)',fld(coll,it.id,'share',it.share,'num','auto: '+dflt));
 }
+function hotelsOf(st){
+  var L=arr(S.lodging).filter(function(l){return l.stay===st.id}),h=[];
+  var pi=L.length&&st.hIn?st.hIn:st.checkIn,po=L.length&&st.hIn?(st.hOut||st.hIn):st.checkOut;
+  h.push({primary:true,id:st.id,name:st.name,in:pi,out:po});
+  L.forEach(function(l){h.push({id:l.id,name:l.name,in:l.checkIn,out:l.checkOut})});
+  return h.filter(function(x){return x.in&&x.out}).sort(function(a,b){return a.in.localeCompare(b.in)||a.out.localeCompare(b.out)});
+}
+function placeCover(st){
+  var h=hotelsOf(st),gaps=[],over=[];if(h.length<2)return {gaps:gaps,over:over};
+  var cur=h[0].out;
+  for(var i=1;i<h.length;i++){
+    if(h[i].in>cur)gaps.push([cur,h[i].in]);
+    else if(h[i].in<cur)over.push([h[i].in,h[i].out<cur?h[i].out:cur]);
+    if(h[i].out>cur)cur=h[i].out;
+  }
+  return {gaps:gaps,over:over};
+}
+function coverNote(st){
+  var pc=placeCover(st),o='';
+  pc.gaps.forEach(function(g){var n=nightsOf(g[0],g[1]);o+='<div class="notice warn">No hotel or stay recorded in '+esc(st.location||'this place')+' from '+esc(dfmt(g[0],{day:'numeric',month:'short'}))+' to '+esc(dfmt(g[1],{day:'numeric',month:'short'}))+(n!==''?' ('+n+' night'+(n===1?'':'s')+')':'')+'. Add a stay or change the dates.</div>'});
+  pc.over.forEach(function(g){o+='<div class="notice warn">Two stays overlap in '+esc(st.location||'this place')+' from '+esc(dfmt(g[0],{day:'numeric',month:'short'}))+' to '+esc(dfmt(g[1],{day:'numeric',month:'short'}))+'.</div>'});
+  return o;
+}
 function lodgOf(sid){return arr(S.lodging).filter(function(b){return b.stay===sid&&vis(b)}).sort(byDate('checkIn'))}
 function lodgRow(l,c){var n=nightsOf(l.checkIn,l.checkOut);return irow('lodging',l,'🏨',esc(l.name||'Another stay (add the name)'),esc('Arrive '+dayf(l.checkIn)+' · leave '+dayf(l.checkOut)+(n!==''&&n>0?' · '+n+' night'+(n===1?'':'s'):'')),c)}
 function budsOf(sid){return arr(S.budget).filter(function(b){return b.stay===sid&&vis(b)}).sort(function(a,b){return (a.created||0)-(b.created||0)})}
@@ -814,6 +859,7 @@ function editor(coll,it,c){
   var i=it.id,f='';
   if(coll==='lodging')f=lab('Hotel or stay name',fld(coll,i,'name',it.name))+lab('Check in',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Check out',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Booked with (optional)',fld(coll,i,'provider',it.provider));
   else if(coll==='stays'&&it.day)f=lab('Day trip to (place)',fld(coll,i,'location',it.location))+lab('Date',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('What you will do',fld(coll,i,'name',it.name));
+  else if(coll==='stays'&&arr(S.lodging).some(function(l){return l.stay===i})&&it.hIn)f=lab('Place',fld(coll,i,'location',it.location))+'<div class="wide totline">The place runs '+esc(dfmt(it.checkIn,{day:'numeric',month:'short'}))+' to '+esc(dfmt(it.checkOut,{day:'numeric',month:'short'}))+', from the first check-in to the last check-out of your stays.</div>'+lab('First stay name',fld(coll,i,'name',it.name))+lab('First stay check in',fld(coll,i,'hIn',it.hIn,'date'))+lab('First stay check out',fld(coll,i,'hOut',it.hOut,'date'));
   else if(coll==='stays')f=lab('Place',fld(coll,i,'location',it.location))+lab('Arrive (from 12pm)',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Leave (by 12pm)',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Stay name',fld(coll,i,'name',it.name));
   else if(coll==='travel')f=lab('From (type, or pick a place)',fld(coll,i,'from',it.from).replace('<input ','<input list="placelist" '))+lab('To (type, or pick a place)',fld(coll,i,'to',it.to).replace('<input ','<input list="placelist" '))+lab(it.leg?'Leaves':'Date',fld(coll,i,'date',it.date,'date'))+lab('Arrives (if a different day)',fld(coll,i,'arriveDate',it.arriveDate,'date'))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
   else if(coll==='general')f=lab('What',fld(coll,i,'item',it.item))+lab('Category',sel(coll,i,'category',it.category,GENCATS))+lab('Date (due or paid)',fld(coll,i,'date',it.date,'date'))+lab('Provider',fld(coll,i,'provider',it.provider));
@@ -887,7 +933,7 @@ function vPlan(){
     var bg=col[norm(s.location)]||'var(--slate)',nn=nightsOf(s.checkIn,s.checkOut),info=sumInfo([s].concat(acts[i],lodgOf(s.id)),budsOf(s.id));
     var hOpen=!!EXP['stays/'+s.id];h+='<div class="pbox"><div class="phead tap" data-exp="stays/'+esc(s.id)+'" tabindex="0" role="button" aria-expanded="'+hOpen+'" title="Tap to change the place, dates and stay details" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.day&&s.checkIn?'Day trip · '+esc(dfmt(s.checkIn,{day:'numeric',month:'short'})):s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+'</small></div><span class="ptail">'+ptotHtml(info)+'<span class="pedit">'+(hOpen?'Close ▾':'Edit ▸')+'</span></span></div>'+(hOpen?editor('stays',s,c):'');
     if(s.day)h+='<div class="sect"><div class="lbl">Day trip · out and back on '+esc(dayf(s.checkIn))+'</div>'+irow('stays',s,'🚆',esc(s.name||'Day trip (add what you will do)'),esc('Day trip on '+dayf(s.checkIn)),c,true)+'</div>';
-    else h+='<div class="sect"><div class="lbl">Stay · arrive from 12pm, leave by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'Stay (no name yet)'),esc('Arrive '+dayf(s.checkIn)+' · leave '+dayf(s.checkOut)),c,true)+lodgOf(s.id).map(function(l){return lodgRow(l,c)}).join('')+addb('lodging','Add another stay in '+esc(s.location||'this place'),{sid:s.id})+'</div>';
+    else h+='<div class="sect"><div class="lbl">Stay · arrive from 12pm, leave by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'Stay (no name yet)'),esc('Arrive '+dayf((hotelsOf(s).filter(function(x){return x.primary})[0]||{in:s.checkIn}).in)+' · leave '+dayf(hotelsOf(s).filter(function(x){return x.primary})[0]?hotelsOf(s).filter(function(x){return x.primary})[0].out:s.checkOut)),c,true)+lodgOf(s.id).map(function(l){return lodgRow(l,c)}).join('')+coverNote(s)+addb('lodging','Add another stay in '+esc(s.location||'this place'),{sid:s.id})+'</div>';
     h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
     h+='<div class="sect"><div class="lbl">Daily budget · food, metro and so on</div>'+budsOf(s.id).map(function(b){return brow(b,c)}).join('')+addb('budget','Add daily budget',{sid:s.id})+'</div>';
     h+='</div>';
@@ -915,7 +961,11 @@ document.addEventListener('click',function(e){
   else if(kd==='travel')id=add('travel',Object.assign({date:b.dataset.date||'',from:b.dataset.from||'',to:b.dataset.to||'',type:'Train',provider:''},pay,(b.dataset.lf&&S.stays[b.dataset.lf]&&S.stays[b.dataset.lt])?legAuto(S.stays[b.dataset.lf],S.stays[b.dataset.lt]):{}));
   else if(kd==='budget'){var nb=budsOf(b.dataset.sid).length;id=add('budget',{stay:b.dataset.sid,name:BUDNAMES[Math.min(nb,BUDNAMES.length-1)],rate:null,per:'pp',days:'',for:(VIEW==='all'?'shared':VIEW)})}
   else if(kd==='daytrip'){var ps=S.stays[b.dataset.sid];if(!ps)return;id=add('stays',Object.assign({day:true,location:'',checkIn:ps.checkOut||'',checkOut:ps.checkOut||'',name:''},pay));kd='stays'}
-  else if(kd==='lodging'){var pl=S.stays[b.dataset.sid];if(!pl)return;id=add('lodging',Object.assign({stay:b.dataset.sid,name:'',checkIn:pl.checkIn||'',checkOut:pl.checkOut||'',provider:''},pay))}
+  else if(kd==='lodging'){var pl=S.stays[b.dataset.sid];if(!pl)return;var li=pl.checkIn||'',lo=pl.checkOut||'';
+    if(!pl.hIn&&li){var hp={hIn:li,hOut:lo};
+      if(lo&&nightsOf(li,lo)>=2){hp.hOut=addDays(lo,-1);li=hp.hOut}
+      applyLocal('stays',b.dataset.sid,hp);save('stays',b.dataset.sid,hp)}
+    id=add('lodging',Object.assign({stay:b.dataset.sid,name:'',checkIn:li,checkOut:lo,provider:''},pay))}
   else if(kd==='general')id=add('general',Object.assign({date:'',item:'',category:GENCATS[0],provider:''},pay));
   else id=add('other',Object.assign({date:b.dataset.date||'',item:'',location:b.dataset.loc||'',category:'Experience / tour',provider:''},pay));
   if(!id)return;EXP[kd+'/'+id]=true;render();
@@ -1064,7 +1114,7 @@ function onField(el){
   if(d.c==='meta'&&(f==='p1'||f==='p2'||f==='start'||f==='end'))renderHead();
 }
 document.addEventListener('input',function(e){if(e.target.closest&&e.target.closest('#view')&&e.target.tagName!=='SELECT')onField(e.target)});
-document.addEventListener('change',function(e){var d=e.target&&e.target.dataset;if(d&&d.c==='stays')scheduleSync()});
+document.addEventListener('change',function(e){var d=e.target&&e.target.dataset;if(d&&(d.c==='stays'||d.c==='lodging'))scheduleSync()});
 document.addEventListener('change',function(e){if(e.target.closest&&e.target.closest('#view')){onField(e.target);if(e.target.tagName==='SELECT'||e.target.type==='date'||(e.target.dataset&&e.target.dataset.c==='meta'&&e.target.dataset.f!=='settleP1'&&e.target.dataset.f!=='settleP2'))render()}});
 document.addEventListener('click',function(e){
   var b=e.target.closest&&e.target.closest('button');if(!b)return;
