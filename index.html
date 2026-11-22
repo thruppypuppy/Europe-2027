@@ -207,6 +207,9 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .blk{color:#1f2d3d}.blk+.blk{border-top:1px solid rgba(0,0,0,.1)}.blk span{font-weight:600;opacity:.8}
 .stt{font-style:normal;font-weight:800;font-size:13px;opacity:.55}.stt.ok{color:#1f9d55;opacity:1}
 .cday .half.fly,.cday .half.full.fly{background:#D5DEE8!important;color:#1f2d3d!important}.cday .half.fly .blk{background:#D5DEE8!important}.cday .half.none{background:#EEF2F6!important;color:#7a8a9c!important}
+.cday .blk,.cday .half.full .blk{justify-content:flex-start!important;align-items:center;text-align:center;padding:7px 6px 3px!important}
+.cday .half.fly,.cday .half.none{justify-content:flex-start!important;align-items:center;text-align:center;padding:7px 6px 3px!important}
+.cday .cmid.hasdt .half+.half .blk,.cday .cmid.hasdt .half+.half.fly,.cday .cmid.hasdt .half+.half.none{padding-top:25px!important}
 .cmid{position:relative}.dtmid{position:absolute;left:4px;right:4px;top:50%;transform:translateY(-50%);z-index:2;color:#1f2d3d;font-size:11px;font-weight:700;line-height:1.15;padding:1px 6px;border-radius:8px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item.needinfo{border:2px solid #f2b705;box-shadow:0 0 0 3px rgba(242,183,5,.22)}
 .whochips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.whochip{border:1px solid var(--line,#ccc);background:transparent;color:inherit;border-radius:99px;padding:5px 11px;font-size:13px;cursor:pointer}.whochip.on{background:var(--blue,#2563eb);border-color:var(--blue,#2563eb);color:#fff;font-weight:600}.totline{font-size:13px;color:#888}.bud .irow .ic{font-size:18px}
@@ -695,7 +698,7 @@ function vCalendarInner(c,P){
       var bd='';
       if(L.leave&&inTrip&&wdMon(d)<5){var fv=freeOn(c,d);bd=fv>=1?'<span class="bd fr">Free</span>':(fv>0?'<span class="bd fr">Free ½</span><span class="bd lvl">Leave ½</span>':'<span class="bd lvl">Leave</span>')}
       var rec=S.days[d]||{};
-      h+='<article class="cday'+(inTrip?'':' offtrip')+'" id="day-'+d+'" data-day="'+d+'"><div class="ch"><span>'+lab+'</span>'+bd+'</div><div class="cmid">'+body+dtm+(ex?'<div class="cx2">'+ex+'</div>':'')+'</div>'+
+      h+='<article class="cday'+(inTrip?'':' offtrip')+'" id="day-'+d+'" data-day="'+d+'"><div class="ch"><span>'+lab+'</span>'+bd+'</div><div class="cmid'+(dtm?' hasdt':'')+'">'+body+dtm+(ex?'<div class="cx2">'+ex+'</div>':'')+'</div>'+
         (L.notes?'<div class="cnote"><textarea id="days-'+d+'-notes" data-c="days" data-i="'+d+'" data-f="notes" data-t="text" rows="2" placeholder="Notes" aria-label="Notes for '+lab+'">'+esc(rec.notes)+'</textarea></div>':'')+'</article>';
     }
     h+='</div>';
