@@ -694,7 +694,7 @@ function vCalendarInner(c,P){
       }
       var js=tr.filter(function(t){return t.date===d}),ex='';
       var dtm='';
-      if(L.places)stays.filter(function(x){return x.day&&x.checkIn===d}).forEach(function(x){dtm+='<div class="dtmid" style="background:'+(pcol[norm(x.location)]||'#CED7E0')+'">'+esc(x.location||'?')+' <i class="stt'+(placeBooked(x)?' tk':'')+'">'+(placeBooked(x)?TICK:'○')+'</i></div>'});
+      if(L.places)stays.filter(function(x){return x.day&&x.checkIn===d}).forEach(function(x){dtm+='<div class="dtmid" style="background:'+(pcol[norm(x.location)]||'#CED7E0')+'">'+esc(x.location||'?')+'</div>'});
       if(L.travel)js.forEach(function(t){var mt=mark(t.status);ex+='<div class="ct2 '+mt[0]+'"><b>'+esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')+(t.provider?' ('+t.provider+')':''))+'</b> '+mt[1]+'</div>'});
       if(L.travel)tr.filter(function(t){return t.arriveDate&&t.arriveDate!==t.date&&t.arriveDate===d}).forEach(function(t){ex+='<div class="ct2 ok"><b>Arrive: '+esc((t.from||'?')+' → '+(t.to||'?'))+'</b></div>'});
       if(L.other)oth.filter(function(x){return x.date===d}).forEach(function(x){var mo=mark(x.status);ex+='<div class="ct2 '+mo[0]+'"><b>'+esc(x.item||'Booking')+(x.provider?' ('+esc(x.provider)+')':'')+'</b> '+mo[1]+'</div>'});
