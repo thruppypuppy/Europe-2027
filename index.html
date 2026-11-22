@@ -205,7 +205,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .cday .ch{background:#E8EDF3;color:#44566c}.cday.offtrip .ch{background:#F0F3F7!important;opacity:1;color:#9aa8b8}
 .half>small{display:none}.half+.half{border-top:1px dashed rgba(0,0,0,.14)}
 .blk{color:#1f2d3d}.blk+.blk{border-top:1px solid rgba(0,0,0,.1)}.blk span{font-weight:600;opacity:.8}
-.stt{font-style:normal;font-weight:800;font-size:13px;opacity:.55}.stt.ok{color:#1f9d55;opacity:1}
+.stt{font-style:normal;font-weight:800;font-size:13px;opacity:.55}.stt.tk{opacity:1;display:inline-flex;vertical-align:-1px}.stt .tick{display:block}
 .cday .half.fly,.cday .half.full.fly{background:#D5DEE8!important;color:#1f2d3d!important}.cday .half.fly .blk{background:#D5DEE8!important}.cday .half.none{background:#EEF2F6!important;color:#7a8a9c!important}
 .cday .blk,.cday .half.full .blk{justify-content:flex-start!important;align-items:center;text-align:center;padding:7px 6px 3px!important}
 .cday .half.fly,.cday .half.none{justify-content:flex-start!important;align-items:center;text-align:center;padding:7px 6px 3px!important}
@@ -289,6 +289,7 @@ var TYPES=['Flight','Train','Car hire','Bus','Ferry','Taxi','Other'];
 var GENCATS=['Travel insurance','Visas and documents','SIM and data','Travel money and cards','Luggage and gear','Medical and vaccinations','Other'];
 var GENMAP={'Travel insurance':'Travel insurance','Visa / documents':'Visas and documents','eSIM / data':'SIM and data'};
 var CATS=['Experience / tour','Food & dining','Tickets / entry','Travel insurance','Visa / documents','eSIM / data','Other'];
+var TICK='<svg class="tick" viewBox="0 0 12 12" width="13" height="13" aria-label="Booked"><path d="M2 6.4l2.7 2.7L10.2 3" fill="none" stroke="#1f9d55" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 var PALP=['#BBD5EE','#F4C5B8','#B7E1D7','#DACCEB','#F6E0B4','#C8E4C0','#EDC2D5','#CED7E0','#DDCFBC','#C0E1F1'];
 var PAL=['#2F5D8A','#C8553D','#2E8B7A','#8A6BB0','#D08C2B','#4E8F4A','#B2456E','#5B6C7D','#7C5E3C','#3F8FB5'];
 var DEF={p1:'Thrupps',p2:'Ameer-Begs',n1a:'',n1b:'',n2a:'',n2b:'',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,home:'Sydney',free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
@@ -682,7 +683,7 @@ function vCalendarInner(c,P){
         if(!list.length&&empty&&flightOn(d,false))return '<div class="half fly"><b>✈️ Flying</b></div>';
         if(!list.length)return '<div class="half'+(empty?' none':' nil')+'">'+(empty?'<b>No stay</b>':'')+'</div>';
         return '<div class="half"><div class="blks">'+list.map(function(st){var bk=placeBooked(st);
-          return '<div class="blk" style="background:'+(pcol[norm(st.location)]||'#CED7E0')+'"'+((P&&!RO)?' draggable="true" data-sid="'+st.id+'" data-from="'+d+'"':'')+'><b>'+esc(st.location||'Unnamed stay')+' <i class="stt'+(bk?' ok':'')+'">'+(bk?'✓':'○')+'</i></b>'+(L.stays&&hotelOn(st,d,cap)?'<span>'+esc(hotelOn(st,d,cap))+'</span>':'')+'</div>'}).join('')+'</div></div>'}
+          return '<div class="blk" style="background:'+(pcol[norm(st.location)]||'#CED7E0')+'"'+((P&&!RO)?' draggable="true" data-sid="'+st.id+'" data-from="'+d+'"':'')+'><b>'+esc(st.location||'Unnamed stay')+' <i class="stt'+(bk?' tk':'')+'">'+(bk?TICK:'○')+'</i></b>'+(L.stays&&hotelOn(st,d,cap)?'<span>'+esc(hotelOn(st,d,cap))+'</span>':'')+'</div>'}).join('')+'</div></div>'}
       var body='',fl=(inTrip&&!o.am.length&&!o.pm.length)?flightOn(d,false):null;
       if(L.places&&fl)body='<div class="half full fly"><div class="blks"><div class="blk" style="background:#D5DEE8"><b>✈️ Flying</b><span>'+esc((fl.from||'?')+' → '+(fl.to||'?'))+'</span></div></div></div>';
       else if(L.places){
@@ -691,7 +692,7 @@ function vCalendarInner(c,P){
       }
       var js=tr.filter(function(t){return t.date===d}),ex='';
       var dtm='';
-      if(L.places)stays.filter(function(x){return x.day&&x.checkIn===d}).forEach(function(x){dtm+='<div class="dtmid" style="background:'+(pcol[norm(x.location)]||'#CED7E0')+'">'+esc(x.location||'?')+' <i class="stt'+(placeBooked(x)?' ok':'')+'">'+(placeBooked(x)?'✓':'○')+'</i></div>'});
+      if(L.places)stays.filter(function(x){return x.day&&x.checkIn===d}).forEach(function(x){dtm+='<div class="dtmid" style="background:'+(pcol[norm(x.location)]||'#CED7E0')+'">'+esc(x.location||'?')+' <i class="stt'+(placeBooked(x)?' tk':'')+'">'+(placeBooked(x)?TICK:'○')+'</i></div>'});
       if(L.travel)js.forEach(function(t){var mt=mark(t.status);ex+='<div class="ct2 '+mt[0]+'"><b>'+esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')+(t.provider?' ('+t.provider+')':''))+'</b> '+mt[1]+'</div>'});
       if(L.travel)tr.filter(function(t){return t.arriveDate&&t.arriveDate!==t.date&&t.arriveDate===d}).forEach(function(t){ex+='<div class="ct2 ok"><b>Arrive: '+esc((t.from||'?')+' → '+(t.to||'?'))+'</b></div>'});
       if(L.other)oth.filter(function(x){return x.date===d}).forEach(function(x){var mo=mark(x.status);ex+='<div class="ct2 '+mo[0]+'"><b>'+esc(x.item||'Booking')+(x.provider?' ('+esc(x.provider)+')':'')+'</b> '+mo[1]+'</div>'});
