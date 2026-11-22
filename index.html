@@ -202,6 +202,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .cost{font-weight:700;font-size:13px;white-space:nowrap}.chev{color:var(--muted);flex:none}
 .iedit{border-top:1px solid var(--line);padding:2px 0 12px}
 .iedit .formgrid{padding:10px 14px 4px}.iedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}.iedit label.wide{grid-column:1/-1}
+.ct2.dayt{background:var(--blue-soft,#eef3ff);padding-left:6px}
 .item.needinfo{border:2px solid #f2b705;box-shadow:0 0 0 3px rgba(242,183,5,.22)}
 .whochips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.whochip{border:1px solid var(--line,#ccc);background:transparent;color:inherit;border-radius:99px;padding:5px 11px;font-size:13px;cursor:pointer}.whochip.on{background:var(--blue,#2563eb);border-color:var(--blue,#2563eb);color:#fff;font-weight:600}.totline{font-size:13px;color:#888}.bud .irow .ic{font-size:18px}
 .attbox{grid-column:1/-1;border-top:1px dashed var(--line,#ddd);padding-top:8px}.attbox h4{margin:0 0 6px;font-size:13px}.attrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}.attrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attrow small{color:#888}.attmsg{font-size:12px;color:#888;margin-top:4px}.attin{display:none}
@@ -299,6 +300,7 @@ var isoOf=function(d){return d.toISOString().slice(0,10)};
 var addDays=function(iso,n){return isoOf(new Date(new Date(iso+'T00:00:00Z').getTime()+n*864e5))};
 var wdMon=function(iso){return (new Date(iso+'T00:00:00Z').getUTCDay()+6)%7};
 var arr=function(o){return Object.keys(o||{}).map(function(id){return Object.assign({id:id},o[id])})};
+var stayCmp=function(a,b){return (a.checkIn||'9999').localeCompare(b.checkIn||'9999')||((b.day?1:0)-(a.day?1:0))||((a.created||0)-(b.created||0))};
 var byDate=function(k){return function(a,b){return (a[k]||'9999').localeCompare(b[k]||'9999')||((a.created||0)-(b.created||0))}};
 var norm=function(s){return String(s||'').trim().toLowerCase()};
 var PARTY=function(k){var c=cfg();return k==='1'?c.p1:c.p2};
@@ -398,7 +400,8 @@ function openAtt(id){
   }).catch(function(e){console.error(e);if(w)w.close();alert('Could not load that file.')});
 }
 function remove(c,i){
-  var k=c+'/'+i;delete S[c][i];
+  var k=c+'/'+i,wasDay=c==='stays'&&S.stays[i]&&S.stays[i].day;delete S[c][i];
+  if(wasDay)arr(S.travel).forEach(function(t){if(t.legFrom===i||t.legTo===i)remove('travel',t.id)});
   attsOf(k).forEach(function(a){delAtt(a.id)});
   if(c==='stays')arr(S.budget).forEach(function(b){if(b.stay===i)remove('budget',b.id)});
   enqueue(k,function(){return db.doc(k).delete().then(function(){delete confirmed[k]})});
@@ -408,7 +411,7 @@ function remove(c,i){
 /* ---------- calculations ---------- */
 function allItems(){
   var out=[];
-  arr(S.stays).forEach(function(x){x.kind='stays';x.label=x.location;x.bucket='Accommodation';out.push(x)});
+  arr(S.stays).forEach(function(x){x.kind='stays';x.label=x.location;x.bucket=x.day?'Other bookings':'Accommodation';out.push(x)});
   arr(S.travel).forEach(function(x){x.kind='travel';x.label=x.from||x.to;x.bucket=({'Flight':'Flights','Train':'Trains','Car hire':'Car hire'})[x.type]||'Other transport';out.push(x)});
   arr(S.other).forEach(function(x){x.kind='other';x.label=x.item;x.bucket='Other bookings';out.push(x)});
   arr(S.general).forEach(function(x){x.kind='general';x.label=x.item;x.bucket='General expenses';out.push(x)});
@@ -422,7 +425,7 @@ var cntOf=function(it){return whoOf(it).length||1};
 var costOf=function(it){return (+it.cost||0)*(it.per==='pp'?cntOf(it):1)};
 var p1frac=function(it){var w=whoOf(it);return w.filter(function(x){return x.charAt(0)==='1'}).length/(w.length||1)};
 var shareOf=function(it){if(it.share!=null&&it.share!=='')return Math.max(0,Math.min(costOf(it),+it.share||0));return costOf(it)*p1frac(it)};
-var budDays=function(b){if(b.days!=null&&b.days!=='')return +b.days||0;var s=S.stays[b.stay],n=s?nightsOf(s.checkIn,s.checkOut):'';return n===''?0:Math.max(0,n)};
+var budDays=function(b){if(b.days!=null&&b.days!=='')return +b.days||0;var s=S.stays[b.stay];if(s&&s.day)return 1;var n=s?nightsOf(s.checkIn,s.checkOut):'';return n===''?0:Math.max(0,n)};
 var budTotal=function(b){return (+b.rate||0)*budDays(b)*(b.per==='pp'?cntOf(b):1)};
 var viewAmt=function(t,s1){return VIEW==='1'?s1:(VIEW==='2'?t-s1:t)};
 function sumInfo(its,buds){var t=0,s1=0,u={};
@@ -474,9 +477,9 @@ function issues(){
   for(var d=c.start;d<c.end;d=addDays(d,1)){if(!stayOn(d)&&!flightOn(d,true))out.push('No stay recorded for the night of '+dfmt(d)+'.')}
   arr(S.travel).filter(vis).sort(byDate('date')).forEach(function(t){
     if(!t.date)return;var lab=(t.type||'Journey').toLowerCase()+' '+(t.from||'?')+' → '+(t.to||'?')+' on '+dfmt(t.date);
-    var prev=addDays(t.date,-1);
-    if(prev>=c.start&&prev<=c.end){var st=stayOn(prev);if(st&&t.from&&norm(st.location)!==norm(t.from))out.push('The '+lab+' leaves from '+t.from+', but the night before you are in '+st.location+'.')}
-    var st2=stayOn(t.date);if(st2&&t.to&&norm(st2.location)!==norm(t.to))out.push('The '+lab+' arrives in '+t.to+', but your stay that night is in '+st2.location+'.');
+    var prev=addDays(t.date,-1),dF=S.stays[t.legFrom]&&S.stays[t.legFrom].day,dT=S.stays[t.legTo]&&S.stays[t.legTo].day;
+    if(!dF&&prev>=c.start&&prev<=c.end){var st=stayOn(prev);if(st&&t.from&&norm(st.location)!==norm(t.from))out.push('The '+lab+' leaves from '+t.from+', but the night before you are in '+st.location+'.')}
+    var st2=dT?null:stayOn(t.date);if(st2&&t.to&&norm(st2.location)!==norm(t.to))out.push('The '+lab+' arrives in '+t.to+', but your stay that night is in '+st2.location+'.');
   });
   return out;
 }
@@ -662,6 +665,7 @@ function vCalendarInner(c,P){
         else if(o.am.length||o.pm.length||(inTrip&&d<c.end))body=blk(o.am,'Until 12pm',inTrip&&d>c.start&&d<c.end)+blk(o.pm,'From 12pm',inTrip&&d>=c.start&&d<c.end);
       }
       var js=tr.filter(function(t){return t.date===d}),ex='';
+      if(L.places)stays.filter(function(x){return x.day&&x.checkIn===d}).forEach(function(x){ex+='<div class="ct2 dayt" style="border-left:4px solid '+(col[norm(x.location)]||'var(--slate)')+'"><b>🚆 Day trip: '+esc(x.location||'?')+'</b></div>'});
       if(L.travel)js.forEach(function(t){var mt=mark(t.status);ex+='<div class="ct2 '+mt[0]+'"><b>'+esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')+(t.provider?' ('+t.provider+')':''))+'</b> '+mt[1]+'</div>'});
       if(L.travel)tr.filter(function(t){return t.arriveDate&&t.arriveDate!==t.date&&t.arriveDate===d}).forEach(function(t){ex+='<div class="ct2 ok"><b>Arrive: '+esc((t.from||'?')+' → '+(t.to||'?'))+'</b></div>'});
       if(L.other)oth.filter(function(x){return x.date===d}).forEach(function(x){var mo=mark(x.status);ex+='<div class="ct2 '+mo[0]+'"><b>'+esc(x.item||'Booking')+(x.provider?' ('+esc(x.provider)+')':'')+'</b> '+mo[1]+'</div>'});
@@ -722,7 +726,8 @@ var syncT=null;
 function scheduleSync(){if(syncT)return;syncT=setTimeout(function(){syncT=null;syncLegs()},60)}
 function syncLegs(){
   if(RO||PLAN.on||Object.keys(loadedSet).length<NEED)return;
-  var st=arr(S.stays).filter(function(x){return norm(x.location)&&x.checkIn&&x.checkOut&&x.checkOut>x.checkIn}).sort(byDate('checkIn')),pairs={},list=[];
+  arr(S.stays).forEach(function(x){if(x.day&&x.checkIn&&x.checkOut!==x.checkIn){x.checkOut=x.checkIn;applyLocal('stays',x.id,{checkOut:x.checkIn});save('stays',x.id,{checkOut:x.checkIn})}});
+  var st=arr(S.stays).filter(function(x){return norm(x.location)&&x.checkIn&&x.checkOut&&(x.checkOut>x.checkIn||x.day)}).sort(stayCmp),pairs={},list=[];
   for(var i=0;i<st.length-1;i++){var a=legAuto(st[i],st[i+1]);pairs[a.legFrom+'>'+a.legTo]=a;list.push(a)}
   var n=0,taken={},orph=[],trv=arr(S.travel);
   var RESET={type:'Train',provider:'',cost:null,status:'Researching',paidBy:'',share:null,notes:'',arriveDate:'',per:'total',who:'',fresh:true};
@@ -802,8 +807,9 @@ function brow(b,c){
 function placeOpts(c){var seen={},o=[c.home||'Sydney'].concat(arr(S.stays).sort(byDate('checkIn')).map(function(x){return x.location}));return o.filter(function(x){var k=norm(x);if(!k||seen[k])return false;seen[k]=1;return true}).map(function(x){return '<option value="'+esc(x)+'">'}).join('')}
 function editor(coll,it,c){
   var i=it.id,f='';
-  if(coll==='stays')f=lab('Place',fld(coll,i,'location',it.location))+lab('Arrive (from 12pm)',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Leave (by 12pm)',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Stay name',fld(coll,i,'name',it.name));
-  else if(coll==='travel')f=lab(it.leg?'Leaves':'Date',fld(coll,i,'date',it.date,'date'))+lab('Arrives (if a different day)',fld(coll,i,'arriveDate',it.arriveDate,'date'))+lab('From (type, or pick a place)',fld(coll,i,'from',it.from).replace('<input ','<input list="placelist" '))+lab('To (type, or pick a place)',fld(coll,i,'to',it.to).replace('<input ','<input list="placelist" '))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
+  if(coll==='stays'&&it.day)f=lab('Day trip to (place)',fld(coll,i,'location',it.location))+lab('Date',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('What you will do',fld(coll,i,'name',it.name));
+  else if(coll==='stays')f=lab('Place',fld(coll,i,'location',it.location))+lab('Arrive (from 12pm)',fld(coll,i,'checkIn',it.checkIn,'date'))+lab('Leave (by 12pm)',fld(coll,i,'checkOut',it.checkOut,'date'))+lab('Stay name',fld(coll,i,'name',it.name));
+  else if(coll==='travel')f=lab('From (type, or pick a place)',fld(coll,i,'from',it.from).replace('<input ','<input list="placelist" '))+lab('To (type, or pick a place)',fld(coll,i,'to',it.to).replace('<input ','<input list="placelist" '))+lab(it.leg?'Leaves':'Date',fld(coll,i,'date',it.date,'date'))+lab('Arrives (if a different day)',fld(coll,i,'arriveDate',it.arriveDate,'date'))+lab('Type',sel(coll,i,'type',it.type,TYPES))+lab('Provider',fld(coll,i,'provider',it.provider));
   else if(coll==='general')f=lab('What',fld(coll,i,'item',it.item))+lab('Category',sel(coll,i,'category',it.category,GENCATS))+lab('Date (due or paid)',fld(coll,i,'date',it.date,'date'))+lab('Provider',fld(coll,i,'provider',it.provider));
   else f=lab('Date',fld(coll,i,'date',it.date,'date'))+lab('What',fld(coll,i,'item',it.item))+lab('Place',fld(coll,i,'location',it.location))+lab('Category',sel(coll,i,'category',it.category,CATS))+lab('Provider',fld(coll,i,'provider',it.provider));
   var note='';
@@ -844,7 +850,7 @@ function flightsCard(kind,list,st,c){
 }
 function vPlan(){
   var c=cfg();
-  var stays=arr(S.stays).filter(vis).sort(byDate('checkIn')),trv=arr(S.travel).filter(vis).sort(byDate('date')),oth=arr(S.other).filter(vis).sort(byDate('date'));
+  var stays=arr(S.stays).filter(vis).sort(stayCmp),trv=arr(S.travel).filter(vis).sort(byDate('date')),oth=arr(S.other).filter(vis).sort(byDate('date'));
   var col={},ci=0;stays.forEach(function(s){var k=norm(s.location);if(k&&!(k in col))col[k]=PAL[ci++%PAL.length]});
   var n=stays.length,arrive=[],depart=[],legs=[],acts=[],stray=[],loose=[];
   stays.forEach(function(){arrive.push([]);depart.push([]);legs.push([]);acts.push([])});
@@ -873,12 +879,13 @@ function vPlan(){
   if(n)h+=flightsCard('out',outsL,stays[0],c)+(startX.length?'<div class="leg"><div class="lbl">Travel to '+esc(stays[0].location||'first place')+'</div>'+startX.map(function(t){return jrow(t,c)}).join('')+'</div>':'<div class="leg slim"></div>');
   stays.forEach(function(s,i){
     var bg=col[norm(s.location)]||'var(--slate)',nn=nightsOf(s.checkIn,s.checkOut),info=sumInfo([s].concat(acts[i]),budsOf(s.id));
-    var hOpen=!!EXP['stays/'+s.id];h+='<div class="pbox"><div class="phead tap" data-exp="stays/'+esc(s.id)+'" tabindex="0" role="button" aria-expanded="'+hOpen+'" title="Tap to change the place, dates and stay details" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+'</small></div><span class="ptail">'+ptotHtml(info)+'<span class="pedit">'+(hOpen?'Close ▾':'Edit ▸')+'</span></span></div>'+(hOpen?editor('stays',s,c):'');
-    h+='<div class="sect"><div class="lbl">Stay · arrive from 12pm, leave by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'Stay (no name yet)'),esc('Arrive '+dayf(s.checkIn)+' · leave '+dayf(s.checkOut)),c,true)+'</div>';
+    var hOpen=!!EXP['stays/'+s.id];h+='<div class="pbox"><div class="phead tap" data-exp="stays/'+esc(s.id)+'" tabindex="0" role="button" aria-expanded="'+hOpen+'" title="Tap to change the place, dates and stay details" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.day&&s.checkIn?'Day trip · '+esc(dfmt(s.checkIn,{day:'numeric',month:'short'})):s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+'</small></div><span class="ptail">'+ptotHtml(info)+'<span class="pedit">'+(hOpen?'Close ▾':'Edit ▸')+'</span></span></div>'+(hOpen?editor('stays',s,c):'');
+    if(s.day)h+='<div class="sect"><div class="lbl">Day trip · out and back on '+esc(dayf(s.checkIn))+'</div>'+irow('stays',s,'🚆',esc(s.name||'Day trip (add what you will do)'),esc('Day trip on '+dayf(s.checkIn)),c,true)+'</div>';
+    else h+='<div class="sect"><div class="lbl">Stay · arrive from 12pm, leave by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'Stay (no name yet)'),esc('Arrive '+dayf(s.checkIn)+' · leave '+dayf(s.checkOut)),c,true)+'</div>';
     h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
     h+='<div class="sect"><div class="lbl">Daily budget · food, metro and so on</div>'+budsOf(s.id).map(function(b){return brow(b,c)}).join('')+addb('budget','Add daily budget',{sid:s.id})+'</div>';
     h+='</div>';
-    if(i<n-1){var nx=stays[i+1];var au=legAuto(s,nx);h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+(legs[i].length?legs[i].map(function(t){return jrow(t,c)}).join(''):'<div class="item auto needinfo"><div class="irow" data-autoleg="'+esc(s.id+'|'+nx.id)+'" tabindex="0" role="button"><span class="ic">🧭</span><div class="it"><b>'+esc((au.from||'?')+' → '+(au.to||'?'))+'</b><small>'+esc(dayf(au.date))+' · filled in from the two cards · tap to add train, flight, cost…</small></div><span class="chipst todo">Add details</span><span class="chev">▸</span></div></div>')+(legs[i].length?addb('travel','Add another journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||'',lf:s.id,lt:nx.id}):'')+'</div>'}
+    if(i<n-1){var nx=stays[i+1];var au=legAuto(s,nx);h+='<div class="leg"><div class="lbl">Travel to '+esc(nx.location||'next place')+'</div>'+(legs[i].length?legs[i].map(function(t){return jrow(t,c)}).join(''):'<div class="item auto needinfo"><div class="irow" data-autoleg="'+esc(s.id+'|'+nx.id)+'" tabindex="0" role="button"><span class="ic">🧭</span><div class="it"><b>'+esc((au.from||'?')+' → '+(au.to||'?'))+'</b><small>'+esc(dayf(au.date))+' · filled in from the two cards · tap to add train, flight, cost…</small></div><span class="chipst todo">Add details</span><span class="chev">▸</span></div></div>')+(legs[i].length?addb('travel','Add another journey',{from:s.location||'',to:nx.location||'',date:s.checkOut||'',lf:s.id,lt:nx.id}):'')+(s.day?'':addb('daytrip','Add a day trip between these places',{sid:s.id}))+'</div>'}
   });
   if(n){var lastS=stays[n-1];for(var q=n-1;q>=0;q--)if(stays[q].checkOut){lastS=stays[q];break}h+=(endX.length?'<div class="leg"><div class="lbl">Travel on from '+esc(lastS.location||'last place')+'</div>'+endX.map(function(t){return jrow(t,c)}).join('')+'</div>':'<div class="leg slim"></div>')+flightsCard('home',homesL,lastS,c)}
   h+='</div><div class="itinfoot">'+addb('stays','Add a place',{})+'</div>';
@@ -892,7 +899,7 @@ document.addEventListener('click',function(e){
     var nid=add('travel',Object.assign(legAuto(A,B),{type:'Train',provider:'',status:'Researching',for:(VIEW==='all'?'shared':VIEW),cost:null,paidBy:'',share:null,notes:''}));
     if(nid){EXP['travel/'+nid]=true;render();var pf=document.getElementById('travel-'+nid+'-provider');if(pf)pf.focus()}return}
   var rl=e.target.closest&&e.target.closest('button[data-relink]');
-  if(rl){if(RO)return;var jt=S.travel[rl.dataset.relink];if(!jt)return;var A2=S.stays[jt.legFrom],B2=S.stays[jt.legTo];if(!A2||!B2)return;var a2=legAuto(A2,B2),pt={from:a2.from,to:a2.to,date:a2.date,sig:a2.sig};applyLocal('travel',jt.id,pt);save('travel',jt.id,pt);render();return}
+  if(rl){if(RO)return;var jt=S.travel[rl.dataset.relink];if(!jt)return;var A2=S.stays[jt.legFrom],B2=S.stays[jt.legTo];if(!A2||!B2)return;var a2=legAuto(A2,B2),pt={from:a2.from,to:a2.to,date:a2.date,sig:a2.sig,autoFrom:a2.from,autoTo:a2.to};applyLocal('travel',jt.id,pt);save('travel',jt.id,pt);render();return}
   var el=e.target.closest&&e.target.closest('[data-exp]');
   if(el){var k=el.dataset.exp;EXP[k]=!EXP[k];render();return}
   var b=e.target.closest&&e.target.closest('button[data-iadd]');if(!b||RO)return;
@@ -901,6 +908,7 @@ document.addEventListener('click',function(e){
   else if(kd==='stays')id=add('stays',Object.assign({location:'',checkIn:b.dataset.date||'',checkOut:'',name:''},pay));
   else if(kd==='travel')id=add('travel',Object.assign({date:b.dataset.date||'',from:b.dataset.from||'',to:b.dataset.to||'',type:'Train',provider:''},pay,(b.dataset.lf&&S.stays[b.dataset.lf]&&S.stays[b.dataset.lt])?legAuto(S.stays[b.dataset.lf],S.stays[b.dataset.lt]):{}));
   else if(kd==='budget'){var nb=budsOf(b.dataset.sid).length;id=add('budget',{stay:b.dataset.sid,name:BUDNAMES[Math.min(nb,BUDNAMES.length-1)],rate:null,per:'pp',days:'',for:(VIEW==='all'?'shared':VIEW)})}
+  else if(kd==='daytrip'){var ps=S.stays[b.dataset.sid];if(!ps)return;id=add('stays',Object.assign({day:true,location:'',checkIn:ps.checkOut||'',checkOut:ps.checkOut||'',name:''},pay));kd='stays'}
   else if(kd==='general')id=add('general',Object.assign({date:'',item:'',category:GENCATS[0],provider:''},pay));
   else id=add('other',Object.assign({date:b.dataset.date||'',item:'',location:b.dataset.loc||'',category:'Experience / tour',provider:''},pay));
   if(!id)return;EXP[kd+'/'+id]=true;render();
@@ -1049,6 +1057,7 @@ function onField(el){
   if(d.c==='meta'&&(f==='p1'||f==='p2'||f==='start'||f==='end'))renderHead();
 }
 document.addEventListener('input',function(e){if(e.target.closest&&e.target.closest('#view')&&e.target.tagName!=='SELECT')onField(e.target)});
+document.addEventListener('change',function(e){var d=e.target&&e.target.dataset;if(d&&d.c==='stays')scheduleSync()});
 document.addEventListener('change',function(e){if(e.target.closest&&e.target.closest('#view')){onField(e.target);if(e.target.tagName==='SELECT'||e.target.type==='date'||(e.target.dataset&&e.target.dataset.c==='meta'&&e.target.dataset.f!=='settleP1'&&e.target.dataset.f!=='settleP2'))render()}});
 document.addEventListener('click',function(e){
   var b=e.target.closest&&e.target.closest('button');if(!b)return;
