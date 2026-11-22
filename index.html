@@ -822,7 +822,7 @@ var dayf=function(d){return d?dfmt(d,{weekday:'short',day:'numeric',month:'short
 function lab(t,inner,cls){return '<label'+(cls?' class="'+cls+'"':'')+'>'+t+inner+'</label>'}
 function whoChips(coll,it,field){
   var w=field==='pwho'?pwhoOf(it):whoOf(it);field=field||'who';
-  return '<div class="whochips">'+TIDS.map(function(t){return '<button type="button" class="whochip'+(w.indexOf(t)>=0?' on':'')+'" data-who="'+coll+'/'+esc(it.id)+'/'+t+'/'+field+'" aria-pressed="'+(w.indexOf(t)>=0)+'">'+esc(tname(t))+'</button>'}).join('')+'</div>';
+  return '<div class="whochips">'+['1','2'].map(function(t){var on=w.some(function(x){return x.charAt(0)===t});return '<button type="button" class="whochip'+(on?' on':'')+'" data-who="'+coll+'/'+esc(it.id)+'/'+t+'/'+field+'" aria-pressed="'+on+'">'+esc(PARTY(t))+'</button>'}).join('')+'</div>';
 }
 function totLine(it){var n=cntOf(it);return it.per==='pp'?'= '+money(costOf(it),2)+' in total for '+n+' '+(n===1?'person':'people'):(n===4?'for everyone':'for '+n+' '+(n===1?'person':'people'))}
 function payFields(coll,it,c){
@@ -955,7 +955,7 @@ function vPlan(){
   if(n)h+=flightsCard('out',outsL,stays[0],c)+(startX.length?'<div class="leg"><div class="lbl">Travel to '+esc(stays[0].location||'first place')+'</div>'+startX.map(function(t){return jrow(t,c)}).join('')+'</div>':'<div class="leg slim"></div>');
   stays.forEach(function(s,i){
     var bg=col[norm(s.location)]||'var(--slate)',nn=nightsOf(s.checkIn,s.checkOut),info=sumInfo([s].concat(acts[i],lodgOf(s.id)),budsOf(s.id));
-    var hOpen=!!EXP['place/'+s.id];h+='<div class="pbox"><div class="phead tap" data-exp="place/'+esc(s.id)+'" tabindex="0" role="button" aria-expanded="'+hOpen+'" title="Tap to rename the place or choose who is there" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.day&&s.checkIn?'Day trip · '+esc(dfmt(s.checkIn,{day:'numeric',month:'short'})):s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+(s.pwho&&pwhoOf(s).length<4?' · '+esc(pwhoOf(s).map(tname).join(', ')):'')+'</small></div><span class="ptail">'+ptotHtml(info)+'<span class="pedit">'+(hOpen?'Close ▾':'Edit ▸')+'</span></span></div>'+(hOpen?(s.day?editor('stays',s,c):placeEditor(s,c)):'');
+    var hOpen=!!EXP['place/'+s.id];h+='<div class="pbox"><div class="phead tap" data-exp="place/'+esc(s.id)+'" tabindex="0" role="button" aria-expanded="'+hOpen+'" title="Tap to rename the place or choose who is there" style="background:'+bg+'"><div><h3>'+esc(s.location||'Unnamed place')+'</h3><small>'+(s.day&&s.checkIn?'Day trip · '+esc(dfmt(s.checkIn,{day:'numeric',month:'short'})):s.checkIn?esc(dfmt(s.checkIn,{day:'numeric',month:'short'}))+' → '+esc(dfmt(s.checkOut,{day:'numeric',month:'short'}))+(nn!==''?' · '+nn+' night'+(nn===1?'':'s'):''):'Dates not set')+(s.pwho&&pwhoOf(s).every(function(x){return x.charAt(0)===pwhoOf(s)[0].charAt(0)})&&pwhoOf(s).length<4?' · '+esc(PARTY(pwhoOf(s)[0].charAt(0)))+' only':'')+'</small></div><span class="ptail">'+ptotHtml(info)+'<span class="pedit">'+(hOpen?'Close ▾':'Edit ▸')+'</span></span></div>'+(hOpen?(s.day?editor('stays',s,c):placeEditor(s,c)):'');
     if(s.day)h+='<div class="sect"><div class="lbl">Day trip · out and back on '+esc(dayf(s.checkIn))+'</div>'+irow('stays',s,'🚆',esc(s.name||'Day trip (add what you will do)'),esc('Day trip on '+dayf(s.checkIn)),c,true)+'</div>';
     else h+='<div class="sect"><div class="lbl">Stays · check in from 12pm, check out by 12pm</div>'+irow('stays',s,'🏨',esc(s.name||'First stay (add the name)'),esc('Arrive '+dayf((hotelsOf(s).filter(function(x){return x.primary})[0]||{in:s.checkIn}).in)+' · leave '+dayf(hotelsOf(s).filter(function(x){return x.primary})[0]?hotelsOf(s).filter(function(x){return x.primary})[0].out:s.checkOut)),c)+lodgOf(s.id).map(function(l){return lodgRow(l,c)}).join('')+coverNote(s)+addb('lodging','Add another stay in '+esc(s.location||'this place'),{sid:s.id})+'</div>';
     h+='<div class="sect"><div class="lbl">Things to do</div>'+acts[i].map(function(o){return arow(o,c)}).join('')+addb('other','Add activity',{loc:s.location||'',date:s.checkIn||''})+'</div>';
@@ -999,7 +999,7 @@ document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' '
 function vSetup(){
   var c=cfg(),n=nightsOf(c.start,c.end);
   return '<section class="card"><div class="cardhead"><div><h2>Travelling parties</h2></div></div><div class="formgrid"><label>First party<input class="in" id="meta-settings-p1" data-c="meta" data-i="settings" data-f="p1" data-t="text" value="'+esc(c.p1)+'" autocomplete="off"></label><label>Second party<input class="in" id="meta-settings-p2" data-c="meta" data-i="settings" data-f="p2" data-t="text" value="'+esc(c.p2)+'" autocomplete="off"></label></div></section>'+
-  '<section class="card"><div class="cardhead"><div><h2>Travellers</h2><p>Names of the four of you. Used to say who a price applies to.</p></div></div><div class="formgrid">'+TIDS.map(function(t){return lab(esc(PARTY(t.charAt(0)))+' traveller '+(t.charAt(1)==='a'?'1':'2'),fld('meta','settings','n'+t,c['n'+t],'text',tname(t)))}).join('')+'</div></section>'+
+
   '<section class="card"><div class="cardhead"><div><h2>Trip dates</h2><p>The Calendar shows every day from start to end'+(n!==''?' ('+n+' nights)':'')+'.</p></div></div><div class="formgrid"><label>Trip starts'+fld('meta','settings','start',c.start,'date')+'</label><label>Trip ends'+fld('meta','settings','end',c.end,'date')+'</label></div></section>'+
   leaveCard(c)+backupCards();
 }
@@ -1152,8 +1152,8 @@ document.addEventListener('click',function(e){
     var f=document.getElementById(c+'-'+id+'-'+(c==='stays'?'location':c==='travel'?'date':'item'));if(f)f.focus();
   }else if(b.dataset.who){
     var pr=b.dataset.who.split('/'),wc=pr[0],wi=pr[1],wt=pr[2],wfd=pr[3]||'who',wit=S[wc]&&S[wc][wi];
-    if(wit&&wfd==='pwho'){wit.id=wi;var pw=pwhoOf(wit),px=pw.indexOf(wt);if(px>=0)pw.splice(px,1);else pw.push(wt);if(pw.length){var pt2={pwho:TIDS.filter(function(x){return pw.indexOf(x)>=0}).join(',')};applyLocal(wc,wi,pt2);save(wc,wi,pt2);render()}}
-    else if(wit){wit.id=wi;var w=whoOf(wit),ix=w.indexOf(wt);if(ix>=0)w.splice(ix,1);else w.push(wt);
+    if(wit&&wfd==='pwho'){wit.id=wi;var tl=wt.length===1?[wt+'a',wt+'b']:[wt],pw=pwhoOf(wit);if(tl.some(function(x){return pw.indexOf(x)>=0}))pw=pw.filter(function(x){return tl.indexOf(x)<0});else pw=pw.concat(tl);if(pw.length){var pt2={pwho:TIDS.filter(function(x){return pw.indexOf(x)>=0}).join(',')};applyLocal(wc,wi,pt2);save(wc,wi,pt2);render()}}
+    else if(wit){wit.id=wi;var w=whoOf(wit),tl2=wt.length===1?[wt+'a',wt+'b']:[wt];if(tl2.some(function(x){return w.indexOf(x)>=0}))w=w.filter(function(x){return tl2.indexOf(x)<0});else w=w.concat(tl2);
       if(w.length){var nw=TIDS.filter(function(x){return w.indexOf(x)>=0}),n1=nw.filter(function(x){return x.charAt(0)==='1'}).length,n2=nw.length-n1,fr=n2===0?'1':(n1===0?'2':'shared'),pt={who:nw.join(','),for:fr};applyLocal(wc,wi,pt);save(wc,wi,pt);render()}}
   }else if(b.dataset.movegen){
     arr(S.other).filter(function(o){return GENMAP[o.category]}).forEach(function(o){
