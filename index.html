@@ -637,7 +637,9 @@ function placeBooked(st){
   var ok=function(x){return x==='Booked'||x==='Paid'};
   return ok(st.status)||arr(S.lodging).some(function(l){return l.stay===st.id&&ok(l.status)});
 }
-function hotelOn(st,d,cap){var q=cap==='Until 12pm'?addDays(d,-1):d,m=null;hotelsOf(st).forEach(function(h){if(h.in<=q&&q<h.out)m=h});return m?(m.name||''):(st.name||'')}
+function hotelAt(st,d,cap){var q=cap==='Until 12pm'?addDays(d,-1):d,m=null;hotelsOf(st).forEach(function(h){if(h.in<=q&&q<h.out&&(!m||h.status==='Booked'||h.status==='Paid'))m=h});return m}
+function bookedAt(st,d,cap){var m=hotelAt(st,d,cap);return !!m&&(m.status==='Booked'||m.status==='Paid')}
+function hotelOn(st,d,cap){var m=hotelAt(st,d,cap);return m?(m.name||''):(st.name||'')}
 function vCalendarInner(c,P){
   var stays=arr(S.stays).filter(vis).sort(byDate('checkIn')),tr=arr(S.travel).filter(vis).sort(byDate('date')),oth=arr(S.other).filter(vis);
   var col={},pcol={},order=[];
@@ -682,7 +684,7 @@ function vCalendarInner(c,P){
       var blk=function(list,cap,empty){
         if(!list.length&&empty&&flightOn(d,false))return '<div class="half fly"><b>✈️ Flying</b></div>';
         if(!list.length)return '<div class="half'+(empty?' none':' nil')+'">'+(empty?'<b>No stay</b>':'')+'</div>';
-        return '<div class="half"><div class="blks">'+list.map(function(st){var bk=placeBooked(st);
+        return '<div class="half"><div class="blks">'+list.map(function(st){var bk=bookedAt(st,d,cap);
           return '<div class="blk" style="background:'+(pcol[norm(st.location)]||'#CED7E0')+'"'+((P&&!RO)?' draggable="true" data-sid="'+st.id+'" data-from="'+d+'"':'')+'><b>'+esc(st.location||'Unnamed stay')+' <i class="stt'+(bk?' tk':'')+'">'+(bk?TICK:'○')+'</i></b>'+(L.stays&&hotelOn(st,d,cap)?'<span>'+esc(hotelOn(st,d,cap))+'</span>':'')+'</div>'}).join('')+'</div></div>'}
       var body='',fl=(inTrip&&!o.am.length&&!o.pm.length)?flightOn(d,false):null;
       if(L.places&&fl)body='<div class="half full fly"><div class="blks"><div class="blk" style="background:#D5DEE8"><b>✈️ Flying</b><span>'+esc((fl.from||'?')+' → '+(fl.to||'?'))+'</span></div></div></div>';
@@ -836,8 +838,8 @@ function payFields(coll,it,c){
 function hotelsOf(st){
   var L=arr(S.lodging).filter(function(l){return l.stay===st.id}),h=[];
   var pi=L.length&&st.hIn?st.hIn:st.checkIn,po=L.length&&st.hIn?(st.hOut||st.hIn):st.checkOut;
-  h.push({primary:true,id:st.id,name:st.name,in:pi,out:po});
-  L.forEach(function(l){h.push({id:l.id,name:l.name,in:l.checkIn,out:l.checkOut})});
+  h.push({primary:true,id:st.id,name:st.name,status:st.status,in:pi,out:po});
+  L.forEach(function(l){h.push({id:l.id,name:l.name,status:l.status,in:l.checkIn,out:l.checkOut})});
   return h.filter(function(x){return x.in&&x.out}).sort(function(a,b){return a.in.localeCompare(b.in)||a.out.localeCompare(b.out)});
 }
 function placeCover(st){
