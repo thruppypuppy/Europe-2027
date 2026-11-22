@@ -452,11 +452,13 @@ var tname=function(t){var c=cfg(),n=c['n'+t];return n||(PARTY(t.charAt(0))+' '+(
 var whoOf=function(it){var w=it.who;if(typeof w==='string'&&w){var a=w.split(',').filter(function(x){return TIDS.indexOf(x)>=0});if(a.length)return a}var f=forOf(it);return f==='1'?['1a','1b']:(f==='2'?['2a','2b']:TIDS.slice())};
 var pwhoOf=function(it){var w=it.pwho;if(typeof w==='string'&&w){var a=w.split(',').filter(function(x){return TIDS.indexOf(x)>=0});if(a.length)return a}return TIDS.slice()};
 var cntOf=function(it){return whoOf(it).length||1};
-var costOf=function(it){return (+it.cost||0)*(it.per==='pp'?cntOf(it):1)};
+var unitsOf=function(it){return it.per==='pp'?cntOf(it):(it.per==='pc'?cntOf(it)/2:1)};
+var unitWord=function(it){var u=unitsOf(it);return it.per==='pc'?u+' couple'+(u===1?'':'s'):u+' '+(u===1?'person':'people')};
+var costOf=function(it){return (+it.cost||0)*unitsOf(it)};
 var p1frac=function(it){var w=whoOf(it);return w.filter(function(x){return x.charAt(0)==='1'}).length/(w.length||1)};
 var shareOf=function(it){if(it.share!=null&&it.share!=='')return Math.max(0,Math.min(costOf(it),+it.share||0));return costOf(it)*p1frac(it)};
 var budDays=function(b){if(b.days!=null&&b.days!=='')return +b.days||0;var s=S.stays[b.stay];if(s&&s.day)return 1;var n=s?nightsOf(s.checkIn,s.checkOut):'';return n===''?0:Math.max(0,n)};
-var budTotal=function(b){return (+b.rate||0)*budDays(b)*(b.per==='pp'?cntOf(b):1)};
+var budTotal=function(b){return (+b.rate||0)*budDays(b)*unitsOf(b)};
 var viewAmt=function(t,s1){return VIEW==='1'?s1:(VIEW==='2'?t-s1:t)};
 function sumInfo(its,buds){var t=0,s1=0,u={};
   its.forEach(function(it){var c=costOf(it);if(!c)return;t+=c;s1+=shareOf(it);whoOf(it).forEach(function(x){u[x]=1})});
@@ -471,7 +473,7 @@ function chipHtml(t,s1,n,pp){
   if(!t)return '';var a=viewAmt(t,s1),l;
   if(VIEW==='all')l=pp||(n===4?'for all 4':'for '+n+' '+(n===1?'person':'people'));else l='your share';
   return '<span class="cost">'+money(a)+'<small>'+esc(l)+'</small></span>'}
-function itChip(it){var n=cntOf(it),pa=paidOf(it),part=it.status!=='Paid'&&pa>0,l=it.per==='pp'?money(+it.cost||0)+' each × '+n:'';return chipHtml(costOf(it),shareOf(it),n,part?(l||(n===4?'for all 4':'for '+n+' '+(n===1?'person':'people')))+' · '+money(pa)+' paid':l)}
+function itChip(it){var n=cntOf(it),pa=paidOf(it),part=it.status!=='Paid'&&pa>0,l=it.per==='pp'?money(+it.cost||0)+' each × '+n:(it.per==='pc'?money(+it.cost||0)+' per couple × '+(n/2):'');return chipHtml(costOf(it),shareOf(it),n,part?(l||(n===4?'for all 4':'for '+n+' '+(n===1?'person':'people')))+' · '+money(pa)+' paid':l)}
 var BUDNAMES=['Food','Metro / local transport','Taxis and rideshare','Groceries','Spending money','Other'];
 function calc(){
   var its=allItems(),T={c1:0,c2:0,pd1:0,pd2:0,cost:0,paid:0,yet:0,paid1:0,paid2:0,fair1:0,yet1:0,missing:0,n:0,done:0,types:{}};
@@ -842,12 +844,12 @@ function whoChips(coll,it,field){
   var w=field==='pwho'?pwhoOf(it):whoOf(it);field=field||'who';
   return '<div class="whochips">'+['1','2'].map(function(t){var on=w.some(function(x){return x.charAt(0)===t});return '<button type="button" class="whochip'+(on?' on':'')+'" data-who="'+coll+'/'+esc(it.id)+'/'+t+'/'+field+'" aria-pressed="'+on+'">'+esc(PARTY(t))+'</button>'}).join('')+'</div>';
 }
-function totLine(it){var n=cntOf(it);return it.per==='pp'?'= '+money(costOf(it),2)+' in total for '+n+' '+(n===1?'person':'people'):(n===4?'for everyone':'for '+n+' '+(n===1?'person':'people'))}
+function totLine(it){var n=cntOf(it);return (it.per==='pp'||it.per==='pc')?'= '+money(costOf(it),2)+' in total for '+unitWord(it):(n===4?'for everyone':'for '+n+' '+(n===1?'person':'people'))}
 function payFields(coll,it,c){
   var needs=(paidOf(it)>0&&!it.paidBy)?'needs':'';
   var dflt=money(costOf(it)*p1frac(it),2);
   return '<label class="wide">Who is this for?'+whoChips(coll,it)+'</label>'+lab('Status',sel(coll,it.id,'status',it.status,STATUS,'st-'+it.status))+
-    lab('Price is',sel(coll,it.id,'per',it.per==='pp'?'pp':'total',[['total','The total price'],['pp','Per person']]))+
+    lab('Price is',sel(coll,it.id,'per',it.per==='pp'?'pp':(it.per==='pc'?'pc':'total'),[['total','The total price'],['pp','Per person'],['pc','Per couple']]))+
     lab('Price (AUD)',fld(coll,it.id,'cost',it.cost,'num','0.00'))+lab('Paid by',sel(coll,it.id,'paidBy',it.paidBy||'',[['',''],['1',c.p1],['2',c.p2]],needs))+
     lab('Part paid so far (AUD)',fld(coll,it.id,'deposit',it.deposit,'num','e.g. deposit')+'<span class="hint">Leave blank if none. Status Paid means paid in full.</span>')+
     '<div class="wide totline">'+esc(totLine(it))+(it.status!=='Paid'&&paidOf(it)>0?'. Paid '+money(paidOf(it),2)+', '+money(costOf(it)-paidOf(it),2)+' still to pay':'')+'</div>'+
@@ -882,19 +884,19 @@ function budsOf(sid){return arr(S.budget).filter(function(b){return b.stay===sid
 function budEditor(b,c){
   var i=b.id,n=budDays(b);
   return '<div class="iedit"><div class="formgrid">'+lab('What',fld('budget',i,'name',b.name,'text','e.g. Food'))+lab('Amount per day (AUD)',fld('budget',i,'rate',b.rate,'num','0.00'))+
-   lab('Amount is',sel('budget',i,'per',b.per==='total'?'total':'pp',[['pp','Per person, per day'],['total','For the whole group, per day']]))+lab('Days (blank = nights stayed)',fld('budget',i,'days',b.days,'num',String(n)))+
-   '<label class="wide">Who is this for?'+whoChips('budget',b)+'</label><div class="wide totline">'+esc(money(+b.rate||0,2)+' × '+n+' day'+(n===1?'':'s')+(b.per==='total'?'':' × '+cntOf(b)+' people')+' = '+money(budTotal(b),2)+'. Counted as an estimate in your totals.')+'</div></div><div class="iact">'+delBtn('budget',i)+'<button class="btn sm" data-exp="budget/'+esc(i)+'">Done</button></div></div>';
+   lab('Amount is',sel('budget',i,'per',b.per==='total'?'total':(b.per==='pc'?'pc':'pp'),[['pp','Per person, per day'],['pc','Per couple, per day'],['total','For the whole group, per day']]))+lab('Days (blank = nights stayed)',fld('budget',i,'days',b.days,'num',String(n)))+
+   '<label class="wide">Who is this for?'+whoChips('budget',b)+'</label><div class="wide totline">'+esc(money(+b.rate||0,2)+' × '+n+' day'+(n===1?'':'s')+(b.per==='total'?'':' × '+unitWord(b))+' = '+money(budTotal(b),2)+'. Counted as an estimate in your totals.')+'</div></div><div class="iact">'+delBtn('budget',i)+'<button class="btn sm" data-exp="budget/'+esc(i)+'">Done</button></div></div>';
 }
 function budSect(s,c){
   var bl=budsOf(s.id),open=!!EXP['bud/'+s.id];
   if(!bl.length)return '<div class="sect budsec"><div class="budline"><span class="lbl">Daily budget</span>'+addb('budget','Add',{sid:s.id})+'</div></div>';
   var t=0,s1=0;bl.forEach(function(b){var x=budTotal(b);t+=x;s1+=x*p1frac(b)});
-  var parts=bl.map(function(b){return esc(b.name||'Budget')+' '+money(+b.rate||0)+(b.per==='total'?'':' pp')}).join(' · ');
+  var parts=bl.map(function(b){return esc(b.name||'Budget')+' '+money(+b.rate||0)+(b.per==='total'?'':(b.per==='pc'?' pc':' pp'))}).join(' · ');
   return '<div class="sect budsec"><div class="budline" data-exp="bud/'+esc(s.id)+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="lbl">Daily budget</span><span class="bparts">'+parts+'</span><span class="bcost">'+money(viewAmt(t,s1))+'</span><span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open?bl.map(function(b){return brow(b,c)}).join('')+addb('budget','Add daily budget',{sid:s.id}):'')+'</div>';
 }
 function brow(b,c){
   var key='budget/'+esc(b.id),open=!!EXP['budget/'+b.id],n=budDays(b);
-  return '<div class="item bud'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">💰</span><div class="it"><b>'+esc(b.name||'Daily budget')+tagOf(b)+'</b><small>'+esc(money(+b.rate||0)+(b.per==='total'?' a day, whole group':' per person a day')+' · '+n+' day'+(n===1?'':'s')+(b.per==='total'?'':' · '+cntOf(b)+' people'))+'</small></div>'+chipHtml(budTotal(b),budTotal(b)*p1frac(b),cntOf(b),b.per==='pp'?money(+b.rate||0)+' each a day × '+cntOf(b):'')+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open?budEditor(b,c):'')+'</div>';
+  return '<div class="item bud'+(open?' open':'')+'"><div class="irow" data-exp="'+key+'" tabindex="0" role="button" aria-expanded="'+open+'"><span class="ic">💰</span><div class="it"><b>'+esc(b.name||'Daily budget')+tagOf(b)+'</b><small>'+esc(money(+b.rate||0)+(b.per==='total'?' a day, whole group':(b.per==='pc'?' per couple a day':' per person a day'))+' · '+n+' day'+(n===1?'':'s')+(b.per==='total'?'':' · '+unitWord(b)))+'</small></div>'+chipHtml(budTotal(b),budTotal(b)*p1frac(b),cntOf(b),b.per==='pp'?money(+b.rate||0)+' each a day × '+cntOf(b):(b.per==='pc'?money(+b.rate||0)+' per couple a day × '+(cntOf(b)/2):''))+'<span class="chev">'+(open?'▾':'▸')+'</span></div>'+(open?budEditor(b,c):'')+'</div>';
 }
 function placeOpts(c){var seen={},o=[c.home||'Sydney'].concat(arr(S.stays).sort(byDate('checkIn')).map(function(x){return x.location}));return o.filter(function(x){var k=norm(x);if(!k||seen[k])return false;seen[k]=1;return true}).map(function(x){return '<option value="'+esc(x)+'">'}).join('')}
 function whoDefault(pl){if(!pl||!pl.pwho)return {};var w=pwhoOf(pl);if(w.length===4)return {};var n1=w.filter(function(x){return x.charAt(0)==='1'}).length,f=n1===w.length?'1':(n1===0?'2':'shared');return {who:w.join(','),for:f}}
