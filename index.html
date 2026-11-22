@@ -202,7 +202,12 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .cost{font-weight:700;font-size:13px;white-space:nowrap}.chev{color:var(--muted);flex:none}
 .iedit{border-top:1px solid var(--line);padding:2px 0 12px}
 .iedit .formgrid{padding:10px 14px 4px}.iedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}.iedit label.wide{grid-column:1/-1}
-.cmid{position:relative}.dtmid{position:absolute;left:4px;right:4px;top:50%;transform:translateY(-50%);z-index:2;color:#fff;font-size:11px;font-weight:700;line-height:1.15;padding:1px 6px;border-radius:8px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cday .ch{background:#E8EDF3;color:#44566c}.cday.offtrip .ch{background:#F0F3F7!important;opacity:1;color:#9aa8b8}
+.half>small{display:none}.half+.half{border-top:1px dashed rgba(0,0,0,.14)}
+.blk{color:#1f2d3d}.blk+.blk{border-top:1px solid rgba(0,0,0,.1)}.blk span{font-weight:600;opacity:.8}
+.stt{font-style:normal;font-weight:800;font-size:13px;opacity:.55}.stt.ok{color:#1f9d55;opacity:1}
+.cday .half.fly,.cday .half.full.fly{background:#D5DEE8!important;color:#1f2d3d!important}.cday .half.fly .blk{background:#D5DEE8!important}.cday .half.none{background:#EEF2F6!important;color:#7a8a9c!important}
+.cmid{position:relative}.dtmid{position:absolute;left:4px;right:4px;top:50%;transform:translateY(-50%);z-index:2;color:#1f2d3d;font-size:11px;font-weight:700;line-height:1.15;padding:1px 6px;border-radius:8px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item.needinfo{border:2px solid #f2b705;box-shadow:0 0 0 3px rgba(242,183,5,.22)}
 .whochips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.whochip{border:1px solid var(--line,#ccc);background:transparent;color:inherit;border-radius:99px;padding:5px 11px;font-size:13px;cursor:pointer}.whochip.on{background:var(--blue,#2563eb);border-color:var(--blue,#2563eb);color:#fff;font-weight:600}.totline{font-size:13px;color:#888}.bud .irow .ic{font-size:18px}
 .attbox{grid-column:1/-1;border-top:1px dashed var(--line,#ddd);padding-top:8px}.attbox h4{margin:0 0 6px;font-size:13px}.attrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}.attrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attrow small{color:#888}.attmsg{font-size:12px;color:#888;margin-top:4px}.attin{display:none}
@@ -281,6 +286,7 @@ var TYPES=['Flight','Train','Car hire','Bus','Ferry','Taxi','Other'];
 var GENCATS=['Travel insurance','Visas and documents','SIM and data','Travel money and cards','Luggage and gear','Medical and vaccinations','Other'];
 var GENMAP={'Travel insurance':'Travel insurance','Visa / documents':'Visas and documents','eSIM / data':'SIM and data'};
 var CATS=['Experience / tour','Food & dining','Tickets / entry','Travel insurance','Visa / documents','eSIM / data','Other'];
+var PALP=['#BBD5EE','#F4C5B8','#B7E1D7','#DACCEB','#F6E0B4','#C8E4C0','#EDC2D5','#CED7E0','#DDCFBC','#C0E1F1'];
 var PAL=['#2F5D8A','#C8553D','#2E8B7A','#8A6BB0','#D08C2B','#4E8F4A','#B2456E','#5B6C7D','#7C5E3C','#3F8FB5'];
 var DEF={p1:'Thrupps',p2:'Ameer-Begs',n1a:'',n1b:'',n2a:'',n2b:'',start:'2027-08-13',end:'2027-09-11',settleP1:0,settleP2:0,leaveBefore:0,leaveSep:0,home:'Sydney',free:[{date:'2027-08-19',part:'pm'},{date:'2027-08-20',part:'full'}]};
 var TABS=[['summary','Summary'],['calendar','Calendar'],['plan','Itinerary'],['general','General'],['setup','Setup']];
@@ -623,11 +629,15 @@ function occ(d){
   var L=(STAYS_OVR||arr(S.stays)).filter(vis).filter(function(s){return s.checkIn&&s.checkOut&&s.checkOut>s.checkIn}).sort(byDate('checkIn'));
   return {am:L.filter(function(s){return s.checkIn<d&&d<=s.checkOut}),pm:L.filter(function(s){return s.checkIn<=d&&d<s.checkOut})};
 }
+function placeBooked(st){
+  var ok=function(x){return x==='Booked'||x==='Paid'};
+  return ok(st.status)||arr(S.lodging).some(function(l){return l.stay===st.id&&ok(l.status)});
+}
 function hotelOn(st,d,cap){var q=cap==='Until 12pm'?addDays(d,-1):d,m=null;hotelsOf(st).forEach(function(h){if(h.in<=q&&q<h.out)m=h});return m?(m.name||''):(st.name||'')}
 function vCalendarInner(c,P){
   var stays=arr(S.stays).filter(vis).sort(byDate('checkIn')),tr=arr(S.travel).filter(vis).sort(byDate('date')),oth=arr(S.other).filter(vis);
-  var col={},order=[];
-  stays.forEach(function(s){var k=norm(s.location);if(k&&!(k in col)){col[k]=PAL[order.length%PAL.length];order.push(s.location)}});
+  var col={},pcol={},order=[];
+  stays.forEach(function(s){var k=norm(s.location);if(k&&!(k in col)){col[k]=PAL[order.length%PAL.length];pcol[k]=PALP[order.length%PALP.length];order.push(s.location)}});
   var iss=issues();
   var box=iss.length?iss.map(function(t){return '<li>'+esc(t)+' <a href="#plan">Fix in Itinerary</a></li>'}).join(''):'<li class="ok">No gaps or mismatches between your stays and journeys.</li>';
   var h='';
@@ -666,19 +676,19 @@ function vCalendarInner(c,P){
       var lab=dfmt(d,{weekday:'short',day:'numeric',month:'short'}),inTrip=d>=c.start&&d<=c.end,o=occ(d);
       var same=o.am.map(function(x){return x.id}).join()===o.pm.map(function(x){return x.id}).join();
       var blk=function(list,cap,empty){
-        if(!list.length&&empty&&flightOn(d,false))return '<div class="half fly">'+(cap?'<small>'+cap+'</small>':'')+'<b>✈️ Flying</b></div>';
-        if(!list.length)return '<div class="half'+(empty?' none':' nil')+'">'+(cap?'<small>'+cap+'</small>':'')+(empty?'<b>No stay</b>':'')+'</div>';
-        return '<div class="half">'+(cap?'<small>'+cap+'</small>':'')+'<div class="blks">'+list.map(function(st){var mk=mark(st.status);
-          return '<div class="blk" style="background:'+(col[norm(st.location)]||'var(--slate)')+'"'+((P&&!RO)?' draggable="true" data-sid="'+st.id+'" data-from="'+d+'"':'')+'><b>'+esc(st.location||'Unnamed stay')+'</b>'+'<span>'+(L.stays?(hotelOn(st,d,cap)?esc(hotelOn(st,d,cap))+' · ':'')+mk[1]:mk[1].charAt(0))+'</span>'+'</div>'}).join('')+'</div></div>'}
+        if(!list.length&&empty&&flightOn(d,false))return '<div class="half fly"><b>✈️ Flying</b></div>';
+        if(!list.length)return '<div class="half'+(empty?' none':' nil')+'">'+(empty?'<b>No stay</b>':'')+'</div>';
+        return '<div class="half"><div class="blks">'+list.map(function(st){var bk=placeBooked(st);
+          return '<div class="blk" style="background:'+(pcol[norm(st.location)]||'#CED7E0')+'"'+((P&&!RO)?' draggable="true" data-sid="'+st.id+'" data-from="'+d+'"':'')+'><b>'+esc(st.location||'Unnamed stay')+' <i class="stt'+(bk?' ok':'')+'">'+(bk?'✓':'○')+'</i></b>'+(L.stays&&hotelOn(st,d,cap)?'<span>'+esc(hotelOn(st,d,cap))+'</span>':'')+'</div>'}).join('')+'</div></div>'}
       var body='',fl=(inTrip&&!o.am.length&&!o.pm.length)?flightOn(d,false):null;
-      if(L.places&&fl)body='<div class="half full fly"><div class="blks"><div class="blk" style="background:var(--slate)"><b>✈️ Flying</b><span>'+esc((fl.from||'?')+' → '+(fl.to||'?'))+'</span></div></div></div>';
+      if(L.places&&fl)body='<div class="half full fly"><div class="blks"><div class="blk" style="background:#D5DEE8"><b>✈️ Flying</b><span>'+esc((fl.from||'?')+' → '+(fl.to||'?'))+'</span></div></div></div>';
       else if(L.places){
         if(same&&o.am.length)body=blk(o.pm,'').replace('class="half"','class="half full"');
         else if(o.am.length||o.pm.length||(inTrip&&d<c.end))body=blk(o.am,'Until 12pm',inTrip&&d>c.start&&d<c.end)+blk(o.pm,'From 12pm',inTrip&&d>=c.start&&d<c.end);
       }
       var js=tr.filter(function(t){return t.date===d}),ex='';
       var dtm='';
-      if(L.places)stays.filter(function(x){return x.day&&x.checkIn===d}).forEach(function(x){dtm+='<div class="dtmid" style="background:'+(col[norm(x.location)]||'var(--slate)')+'">🚆 Day trip: '+esc(x.location||'?')+'</div>'});
+      if(L.places)stays.filter(function(x){return x.day&&x.checkIn===d}).forEach(function(x){dtm+='<div class="dtmid" style="background:'+(pcol[norm(x.location)]||'#CED7E0')+'">'+esc(x.location||'?')+' <i class="stt'+(placeBooked(x)?' ok':'')+'">'+(placeBooked(x)?'✓':'○')+'</i></div>'});
       if(L.travel)js.forEach(function(t){var mt=mark(t.status);ex+='<div class="ct2 '+mt[0]+'"><b>'+esc((t.type||'Journey')+': '+(t.from||'?')+' → '+(t.to||'?')+(t.provider?' ('+t.provider+')':''))+'</b> '+mt[1]+'</div>'});
       if(L.travel)tr.filter(function(t){return t.arriveDate&&t.arriveDate!==t.date&&t.arriveDate===d}).forEach(function(t){ex+='<div class="ct2 ok"><b>Arrive: '+esc((t.from||'?')+' → '+(t.to||'?'))+'</b></div>'});
       if(L.other)oth.filter(function(x){return x.date===d}).forEach(function(x){var mo=mark(x.status);ex+='<div class="ct2 '+mo[0]+'"><b>'+esc(x.item||'Booking')+(x.provider?' ('+esc(x.provider)+')':'')+'</b> '+mo[1]+'</div>'});
