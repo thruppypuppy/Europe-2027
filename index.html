@@ -228,6 +228,7 @@ button:disabled,.in:disabled{cursor:not-allowed;opacity:.6}
 .itin .budline .bcost{flex:none;font-weight:700;font-size:13px}.itin .budline .chev{flex:none;opacity:.6}
 .itin .budsec .item{margin-left:0}
 @media(max-width:600px){.psplit{display:none}}
+.duelist{display:flex;flex-direction:column}.duerow{display:flex;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}.duerow:first-child{border-top:0}.duerow .dd{flex:none;width:96px}.duerow .dd b{display:block;font-size:13px}.duerow small{color:var(--muted);font-size:12px}.duerow .dw{flex:1;min-width:0}.duerow .dw b{display:block;font-size:14px}.duerow .dw small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.duerow .da{flex:none;font-weight:700;font-size:14px}.duerow.late .dd small,.duerow.late .dd b{color:#c0392b}
 .cmid{position:relative}.dtmid{position:absolute;left:4px;right:4px;top:50%;transform:translateY(-50%);z-index:2;color:#1f2d3d;font-size:11px;font-weight:700;line-height:1.15;padding:1px 6px;border-radius:8px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item.needinfo{border:2px solid #f2b705;box-shadow:0 0 0 3px rgba(242,183,5,.22)}
 .whochips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.whochip{border:1px solid var(--line,#ccc);background:transparent;color:inherit;border-radius:99px;padding:5px 11px;font-size:13px;cursor:pointer}.whochip.on{background:var(--blue,#2563eb);border-color:var(--blue,#2563eb);color:#fff;font-weight:600}.totline{font-size:13px;color:#888}.bud .irow .ic{font-size:18px}
@@ -547,6 +548,30 @@ function mark(st){
 }
 
 /* ---------- views ---------- */
+function dueTitle(it){
+  if(it.kind==='travel')return {to:it.provider||it.type||'Travel',what:(it.type?it.type+': ':'')+(it.from||'?')+' → '+(it.to||'?')};
+  if(it.kind==='stays')return {to:it.name||it.location||'Stay',what:'Stay in '+(it.location||'?')};
+  if(it.kind==='lodging'){var pl=S.stays[it.stay];return {to:it.provider||it.name||'Stay',what:'Stay in '+((pl&&pl.location)||'?')+(it.name?' · '+it.name:'')}}
+  if(it.kind==='general')return {to:it.provider||it.item||'General',what:it.item||'General expense'};
+  return {to:it.provider||it.item||'Booking',what:(it.item||'Activity')+(it.place?' · '+it.place:'')};
+}
+function upcomingCard(){
+  var today=new Date().toISOString().slice(0,10),rows=[],tot=0;
+  allItems().forEach(function(it){
+    if(!it.dueDate||it.status==='Cancelled'||it.status==='Paid')return;
+    var cost=costOf(it),left=cost-paidOf(it);if(left<0.5)return;
+    var amt=it.dueAmt!=null&&it.dueAmt!==''?Math.min(+it.dueAmt||0,left):left;if(amt<=0)return;
+    var sh=cost>0?shareOf(it)/cost:0,v=viewAmt(amt,amt*sh);if(v<0.5)return;
+    rows.push({d:it.dueDate,amt:v,t:dueTitle(it)});tot+=v;
+  });
+  rows.sort(function(a,b){return a.d.localeCompare(b.d)});
+  if(!rows.length)return '<section class="card"><div class="cardhead"><div><h2>Upcoming payments</h2><p>Add a payment due date to any item and it will show up here, with who to pay.</p></div></div></section>';
+  var body=rows.map(function(r){
+    var n=nightsOf(today,r.d),late=r.d<today,rel=late?'overdue':(n===0?'today':'in '+n+' day'+(n===1?'':'s'));
+    return '<div class="duerow'+(late?' late':'')+'"><div class="dd"><b>'+esc(dfmt(r.d,{day:'numeric',month:'short',year:'numeric'}))+'</b><small>'+rel+'</small></div><div class="dw"><b>'+esc(r.t.to)+'</b><small>'+esc(r.t.what)+'</small></div><div class="da">'+money(r.amt,2)+'</div></div>';
+  }).join('');
+  return '<section class="card"><div class="cardhead"><div><h2>Upcoming payments</h2><p>'+(VIEW==='all'?'Everything still to pay with a due date.':'Your share of what is still to pay.')+' Total '+money(tot,2)+'.</p></div></div><div class="duelist">'+body+'</div></section>';
+}
 function vSummary(){
   var m=calc(),c=cfg(),pv=VIEW==='1'||VIEW==='2';
   if(pv){var K=VIEW;m.view={cost:m['c'+K],paid:m['pd'+K],types:{}};m.view.yet=m.view.cost-m.view.paid;Object.keys(m.types).forEach(function(k){var x=m.types[k];m.view.types[k]={cost:x['c'+K],paid:x['pd'+K]}})}
@@ -557,7 +582,7 @@ function vSummary(){
   var rows=keys.map(function(k){var x=V.types[k];return '<tr><td class="c">'+esc(k)+'<span class="catbar" style="width:'+(x.cost/maxc*100)+'%"></span></td><td class="n c">'+mny(x.cost)+'</td><td class="n c">'+mny(x.paid)+'</td><td class="n c">'+mny(x.cost-x.paid)+'</td></tr>'}).join('');
   var warn=m.missing?'<div class="notice">'+m.missing+' item'+(m.missing>1?'s are':' is')+' paid or part paid with no Paid by, so '+(m.missing>1?'they are':'it is')+' left out of the split. Fix it on the Itinerary tab.</div>':'';
   return (isEmpty()?'<div class="notice">Nothing here yet. Open Setup to import your starter data, or add rows on the Itinerary tab.</div>':'')+(pv?'<div class="notice">Totals below are '+esc(PARTY(VIEW))+' only: your share of every item. Who owes who and settle-up still cover the whole trip.</div>':'')+warn+'<section class="tiles">'+tile(pv?'Your total cost':'Total cost',money(V.cost))+tile(pv?'Your share paid':'Paid so far',money(V.paid),'<div class="bar"><i style="width:'+pct+'%"></i></div>')+tile('Yet to pay',money(V.yet))+tile('Booked or paid',m.done+' of '+m.n)+'</section>'+
-  '<section class="card"><div class="cardhead"><div><h2>Who owes who</h2><p>Based on items marked Paid, using the share amounts on the Itinerary tab.</p></div></div>'+
+  upcomingCard()+'<section class="card"><div class="cardhead"><div><h2>Who owes who</h2><p>Based on items marked Paid, using the share amounts on the Itinerary tab.</p></div></div>'+
     '<div class="verdict '+(sq?'sq':'owe')+'">'+verdict+'</div><div class="tbl-wrap"><table class="plain"><thead><tr><th></th><th class="n">'+esc(c.p1)+'</th><th class="n">'+esc(c.p2)+'</th></tr></thead><tbody>'+
     '<tr><td>Settle-up payments made to the other party<br><span class="hint">Add each one in the box below.</span></td><td class="n">'+mny(m.s1)+'</td><td class="n">'+mny(m.s2)+'</td></tr>'+
     '</tbody></table></div></section>'+payCard(m,c)+
@@ -851,6 +876,7 @@ function payFields(coll,it,c){
   return '<label class="wide">Who is this for?'+whoChips(coll,it)+'</label>'+lab('Status',sel(coll,it.id,'status',it.status,STATUS,'st-'+it.status))+
     lab('Price is',sel(coll,it.id,'per',it.per==='pp'?'pp':(it.per==='pc'?'pc':'total'),[['total','The total price'],['pp','Per person'],['pc','Per couple']]))+
     lab('Price (AUD)',fld(coll,it.id,'cost',it.cost,'num','0.00'))+lab('Paid by',sel(coll,it.id,'paidBy',it.paidBy||'',[['',''],['1',c.p1],['2',c.p2]],needs))+
+    lab('Payment due date',fld(coll,it.id,'dueDate',it.dueDate,'date'))+lab('Amount due then (AUD)',fld(coll,it.id,'dueAmt',it.dueAmt,'num','blank = what is left'))+
     lab('Part paid so far (AUD)',fld(coll,it.id,'deposit',it.deposit,'num','e.g. deposit')+'<span class="hint">Leave blank if none. Status Paid means paid in full.</span>')+
     '<div class="wide totline">'+esc(totLine(it))+(it.status!=='Paid'&&paidOf(it)>0?'. Paid '+money(paidOf(it),2)+', '+money(costOf(it)-paidOf(it),2)+' still to pay':'')+'</div>'+
     lab(esc(c.p1)+' share (AUD)',fld(coll,it.id,'share',it.share,'num','auto: '+dflt));
